@@ -54,6 +54,7 @@ app/
     quiz_page copy.html
     quiz_page.html
     report_page.html
+  database.py
   main.py
   quizzes_data.json
 docker-compose.yml
@@ -2543,6 +2544,102 @@ the content block above #} {% endblock %}
 {% endblock %}
 </file>
 
+<file path="app/database.py">
+# app/database.py
+import os
+import logging
+from typing import Optional
+
+from pymongo import MongoClient
+from pymongo.database import Database
+from pymongo.collection import Collection
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# --- Logging Setup ---
+# The logger will inherit basicConfig from main.py if this module is imported after basicConfig is set.
+# For standalone testing or different logging, configure it here.
+logger = logging.getLogger(__name__)
+
+# --- MongoDB Configuration ---
+MONGO_URI: Optional[str] = os.getenv("MONGO_URI")
+MONGO_DB_NAME: Optional[str] = os.getenv("MONGO_DB_NAME")
+MONGO_REPORTS_COLLECTION: Optional[str] = os.getenv("MONGO_REPORTS_COLLECTION")
+
+mongo_client: Optional[MongoClient] = None
+db: Optional[Database] = None
+reports_collection: Optional[Collection] = None
+
+def connect_to_mongo():
+    """
+    Establishes a connection to MongoDB and initializes the db and reports_collection.
+    """
+    global mongo_client, db, reports_collection
+
+    if reports_collection is not None: # Already connected
+        logger.debug("MongoDB connection already established.")
+        return
+
+    if not MONGO_URI or not MONGO_DB_NAME or not MONGO_REPORTS_COLLECTION:
+        logger.critical(
+            "MongoDB environment variables (MONGO_URI, MONGO_DB_NAME, MONGO_REPORTS_COLLECTION) "
+            "not fully set. MongoDB integration will be disabled."
+        )
+        return
+
+    try:
+        # Obfuscate credentials for logging if present
+        log_uri = MONGO_URI
+        if "@" in log_uri and "mongodb+srv://" in log_uri:
+            parts = log_uri.split("@")
+            credentials_part = parts[0].split("://")
+            if len(credentials_part) > 1 and ":" in credentials_part[1]:
+                user_pass = credentials_part[1].split(":")
+                user = user_pass[0]
+                log_uri = f"{credentials_part[0]}://{user}:<PASSWORD>@{parts[1]}"
+            else: # Just user, no password, or malformed
+                 log_uri = f"{credentials_part[0]}://<USER>@{parts[1]}"
+
+
+        logger.info(f"Attempting to connect to MongoDB: {log_uri} (DB: {MONGO_DB_NAME})")
+        mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # Timeout for connection
+        mongo_client.admin.command('ping') # Verify connection
+
+        db = mongo_client[MONGO_DB_NAME]
+        reports_collection = db[MONGO_REPORTS_COLLECTION]
+
+        logger.info(
+            f"Successfully connected to MongoDB. Database: {MONGO_DB_NAME}, "
+            f"Collection: {MONGO_REPORTS_COLLECTION}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}. MongoDB integration will be disabled.")
+        mongo_client = None
+        db = None
+        reports_collection = None
+
+def close_mongo_connection():
+    """
+    Closes the MongoDB connection if it's open.
+    """
+    global mongo_client
+    if mongo_client:
+        mongo_client.close()
+        mongo_client = None
+        db = None
+        reports_collection = None # Ensure this is also reset
+        logger.info("MongoDB connection closed.")
+
+# --- Initialize connection when module is loaded ---
+# This makes `reports_collection` available for import in main.py.
+# For FastAPI applications, it's generally better to manage connections
+# using lifespan events (on_event("startup") and on_event("shutdown")).
+# However, this approach keeps it simple and similar to your original structure.
+# connect_to_mongo()
+</file>
+
 <file path="app/main.py">
 # app/main.py
 import json
@@ -2550,58 +2647,51 @@ from datetime import datetime
 from typing import Optional, Dict, Any, Union, List
 from pathlib import Path
 from uuid import uuid4
-import logging
+import logging # Keep logging import at the top
 import html
-import os # For environment variables
+import os
+from contextlib import asynccontextmanager # For lifespan manager
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from pymongo import MongoClient
-from bson import ObjectId # Not strictly needed if using custom 'id' for queries
-from dotenv import load_dotenv
+# --- Logging Setup ---
+# Configure logging as early as possible.
+# Using asctime for ISO-like format, process ID, and thread ID for more context
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format='%(asctime)s.%(msecs)03dZ [%(process)d:%(thread)d] %(levelname)-5s [%(name)s] %(module)s.%(funcName)s: %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S' # Simplified ISO 8601 format
+)
+logger = logging.getLogger(__name__) # Logger for this module
+
+# --- Import database components ---
+# This import should now work correctly because `app` is a package
+from .database import reports_collection, connect_to_mongo, close_mongo_connection
 
 # --- Constants & Configuration ---
-load_dotenv() # Load environment variables from .env file
-
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 QUIZZES_DATA_FILE = BASE_DIR / "quizzes_data.json"
 
-# --- Logging Setup ---
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(name)s: %(message)s')
-logger = logging.getLogger(__name__)
 
-# --- MongoDB Connection ---
-MONGO_URI = os.getenv("MONGO_URI")
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME") # This was 'dirah' in your logs, make sure .env matches if 'thinksync' is intended
-MONGO_REPORTS_COLLECTION = os.getenv("MONGO_REPORTS_COLLECTION")
+# --- FastAPI Lifespan Events for DB Connection ---
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI): # Renamed 'app' to 'app_instance' to avoid conflict
+    logger.info("Application startup: connecting to MongoDB...")
+    connect_to_mongo() # Call the connect function from database.py
+    yield
+    logger.info("Application shutdown: closing MongoDB connection...")
+    close_mongo_connection() # Call the close function from database.py
 
-mongo_client: Optional[MongoClient] = None
-db = None
-reports_collection = None # Initialize as None
-
-if not MONGO_URI or not MONGO_DB_NAME or not MONGO_REPORTS_COLLECTION:
-    logger.critical("MongoDB environment variables (MONGO_URI, MONGO_DB_NAME, MONGO_REPORTS_COLLECTION) not fully set. MongoDB integration will be disabled.")
-else:
-    try:
-        mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # Timeout for connection
-        mongo_client.admin.command('ping') # Verify connection
-        db = mongo_client[MONGO_DB_NAME]
-        reports_collection = db[MONGO_REPORTS_COLLECTION]
-        logger.info(f"Successfully connected to MongoDB Atlas. Database: {MONGO_DB_NAME}, Collection: {MONGO_REPORTS_COLLECTION}")
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}. MongoDB integration will be disabled.")
-        mongo_client = None
-        db = None
-        reports_collection = None # Ensure it's None on failure
+app = FastAPI(title="mansematch", lifespan=lifespan)
 
 
 # Hardcoded users for POC
 FAKE_USERS_DB = {
     "user1@example.com": {
-        "hashed_password": "password123", # Plain text for POC simplicity
+        "hashed_password": "password123",
         "email": "user1@example.com",
         "id": "user1"
     },
@@ -2612,12 +2702,9 @@ FAKE_USERS_DB = {
     }
 }
 
-# --- Application Setup ---
-app = FastAPI(title="mansematch")
-
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals['html_escape'] = html.escape
-templates.env.filters['json_dumps'] = json.dumps # For passing data to JS in templates
+templates.env.filters['json_dumps'] = json.dumps
 
 # --- BFI-10 Specific Data ---
 BFI10_TRAIT_DESCRIPTIONS = {
@@ -2647,8 +2734,11 @@ def get_bfi10_interpretation_details(trait_name: str, score: Optional[float]) ->
                 level_description = "Indicates a tendency to experience emotional fluctuations, anxiety, or moodiness more frequently."
             else:
                 level_description = f"Indicates a higher expression of typical {trait_name.lower()} characteristics."
+    else: # Explicitly handle case where score is None
+        level = "N/A" # or "Not Scored"
+        level_description = "This trait was not scored."
 
-    # Ensure trait_name exists in BFI10_TRAIT_DESCRIPTIONS to avoid KeyError
+
     general_description = BFI10_TRAIT_DESCRIPTIONS.get(trait_name, "General description not available.")
 
     return {
@@ -2661,7 +2751,7 @@ def get_bfi10_interpretation_details(trait_name: str, score: Optional[float]) ->
 # --- Custom Exception for HTMX Redirects ---
 class HtmxRedirectException(HTTPException):
     def __init__(self, redirect_url: str):
-        super().__init__(status_code=200, detail="HTMX redirect")
+        super().__init__(status_code=200, detail="HTMX redirect") # 200 is often used for HTMX redirects
         self.headers = {"HX-Redirect": redirect_url}
 
 @app.exception_handler(HtmxRedirectException)
@@ -2678,13 +2768,11 @@ def load_quizzes_data() -> Dict[str, Any]:
             return data
     except FileNotFoundError:
         logger.error(f"{QUIZZES_DATA_FILE} not found. Returning empty quiz definitions.")
-        return {"quizzes": []} # Only quizzes here, reports are from DB
+        return {"quizzes": []}
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding {QUIZZES_DATA_FILE}: {e}. Returning empty quiz definitions.")
         return {"quizzes": []}
 
-# Note: save_quizzes_data is no longer needed for reports.
-# If you modify quiz definitions via an admin panel later, you might need it for quizzes.
 
 # --- Authentication Dependencies ---
 async def get_current_user_from_cookie(request: Request) -> Optional[Dict[str, Any]]:
@@ -2701,8 +2789,9 @@ async def get_current_user_or_htmx_redirect(
         logger.warning(f"User not authenticated. Path: {request.url.path}. HX-Request: {'hx-request' in request.headers}")
         if "hx-request" in request.headers:
             raise HtmxRedirectException(redirect_url=app.url_path_for("auth_page_route"))
-        else:
-            raise HTTPException(status_code=303, detail="Not authenticated", headers={"Location": app.url_path_for("auth_page_route")})
+        else: # Standard redirect for non-HTMX requests
+            # Using 307 to preserve method if original was POST, though for GET this is fine
+            raise HTTPException(status_code=307, detail="Not authenticated", headers={"Location": app.url_path_for("auth_page_route")})
     return current_user
 
 
@@ -2736,6 +2825,7 @@ async def subscribe_email_route(request: Request, email: str = Form(...)):
 async def auth_page_route(request: Request):
     if request.state.user:
         logger.info(f"User {request.state.user['email']} already authenticated, redirecting to dashboard.")
+        # Using 303 See Other for redirect after GET if resource has moved or state changes
         return RedirectResponse(url=app.url_path_for("dashboard_page_route"), status_code=303)
     logger.info("Auth page requested.")
     return templates.TemplateResponse("auth.html", {
@@ -2751,14 +2841,14 @@ async def login_user_route(request: Request, email: str = Form(...), password: s
         return HTMLResponse("<p class='text-red-600'>Invalid email or password. Please try again.</p>", status_code=401)
 
     logger.info(f"User {email} logged in successfully.")
-    response = HTMLResponse(content="<p>Login successful! Redirecting...</p>", status_code=200)
+    response = HTMLResponse(content="<p>Login successful! Redirecting...</p>", status_code=200) # Keep 200 for HTMX
     response.set_cookie(
         key="user_session",
         value=user["email"],
         httponly=True,
         max_age=1800, # 30 minutes
-        samesite="Lax",
-        secure=request.url.scheme == "https",
+        samesite="Lax", # Good default
+        secure=request.url.scheme == "https", # Only send over HTTPS if applicable
         path="/"
     )
     redirect_url = app.url_path_for("dashboard_page_route")
@@ -2767,14 +2857,17 @@ async def login_user_route(request: Request, email: str = Form(...), password: s
     return response
 
 @app.post("/logout", name="logout_route")
-async def logout_user_route(request: Request):
-    user_email = request.state.user.get('email') if request.state.user else "Unknown"
-    logger.info(f"User {user_email} logging out.")
+async def logout_user_route(request: Request): # No current_user dependency needed here as we are logging out
+    user_email_before_logout = request.state.user.get('email') if request.state.user else "Unknown (already logged out or session expired)"
+    logger.info(f"User {user_email_before_logout} initiating logout.")
 
+    # Prepare context for the page we are redirecting to (homepage)
+    # The middleware will re-evaluate user for the template, but we want to ensure
+    # the user is None for the template rendered in *this* response.
     context = {
         "request": request,
         "title": "Welcome - mansematch",
-        "user": None
+        "user": None # Explicitly set user to None for rendering index.html
     }
     html_content = templates.get_template("index.html").render(context)
 
@@ -2786,6 +2879,8 @@ async def logout_user_route(request: Request):
         secure=request.url.scheme == "https",
         path="/"
     )
+    # HX-Push-Url updates the browser's URL bar.
+    # Since we are returning the full new page content for "/", this is good.
     response.headers["HX-Push-Url"] = app.url_path_for("homepage")
     return response
 
@@ -2799,26 +2894,24 @@ async def dashboard_page_route(
     quizzes_definitions = load_quizzes_data().get("quizzes", [])
 
     user_reports = []
-    # MODIFIED HERE:
     if reports_collection is not None:
         try:
-            # Sort by date_taken descending to show newest first
             report_cursor = reports_collection.find({"user_id": current_user["id"]}).sort("date_taken", -1)
             user_reports = list(report_cursor)
             logger.debug(f"User {current_user['email']} has {len(user_reports)} reports from MongoDB.")
         except Exception as e:
             logger.error(f"Error fetching reports from MongoDB for user {current_user['email']}: {e}")
-            # Optionally, set a message for the user in the template
+            # Consider raising HTTPException or passing an error to the template
+            # For now, it will show "no reports" if DB fails.
     else:
-        logger.warning("Reports collection is not available (reports_collection is None). Cannot fetch reports.")
-
+        logger.warning("Reports collection is not available. Cannot fetch reports for dashboard.")
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "title": "Dashboard - mansematch",
         "user": current_user,
         "quizzes": quizzes_definitions,
-        "reports": user_reports # These are full report documents from Mongo
+        "reports": user_reports
     })
 
 # --- Quiz Routes ---
@@ -2849,42 +2942,40 @@ async def quiz_page_route(
         "quiz": quiz_detail
     })
 
-def calculate_bfi10_scores(questions: List[Dict[str, Any]], user_answers_dict: Dict[str, int]) -> Dict[str, float]:
-    scores = {"E": [], "A": [], "C": [], "N": [], "O": []}
+def calculate_bfi10_scores(questions: List[Dict[str, Any]], user_answers_dict: Dict[str, Union[int, float]]) -> Dict[str, Optional[float]]:
+    scores: Dict[str, List[float]] = {"E": [], "A": [], "C": [], "N": [], "O": []}
     trait_map = {
-        "E": "Extraversion",
-        "A": "Agreeableness",
-        "C": "Conscientiousness",
-        "N": "Neuroticism",
-        "O": "Openness"
+        "E": "Extraversion", "A": "Agreeableness", "C": "Conscientiousness",
+        "N": "Neuroticism", "O": "Openness"
     }
 
     for question in questions:
-        q_id = question.get("id")
+        q_id_str = str(question.get("id"))
         key = question.get("key")
-        user_answer = user_answers_dict.get(q_id)
+        user_answer_val = user_answers_dict.get(q_id_str)
 
-        if user_answer is None or key is None:
-            logger.warning(f"Missing answer or key for BFI-10 question ID: {q_id}. User answers: {user_answers_dict}")
+        if user_answer_val is None or key is None:
+            logger.warning(f"Missing answer or key for BFI-10 question ID: {q_id_str}. User answers: {user_answers_dict}")
             continue
 
+        # Ensure user_answer_val is float for calculations
         try:
-            answer_val = int(user_answer)
-        except ValueError:
-            logger.error(f"Invalid non-integer answer for BFI-10 question {q_id}: {user_answer}")
+            answer_val = float(user_answer_val)
+        except (ValueError, TypeError):
+            logger.error(f"Invalid non-numeric answer for BFI-10 question {q_id_str}: {user_answer_val}")
             continue
 
         trait_code = key[0]
         is_reversed = key.endswith("_R")
 
         if trait_code not in scores:
-            logger.warning(f"Unknown trait '{trait_code}' in key '{key}' for question {q_id}")
+            logger.warning(f"Unknown trait '{trait_code}' in key '{key}' for question {q_id_str}")
             continue
 
         actual_score = (6 - answer_val) if is_reversed else answer_val
         scores[trait_code].append(actual_score)
 
-    final_scores = {}
+    final_scores: Dict[str, Optional[float]] = {}
     for trait_code, items_scores in scores.items():
         trait_name = trait_map.get(trait_code)
         if not trait_name:
@@ -2895,24 +2986,22 @@ def calculate_bfi10_scores(questions: List[Dict[str, Any]], user_answers_dict: D
             final_scores[trait_name] = round(avg_score, 2)
         else:
             final_scores[trait_name] = None
-            logger.warning(f"No scores recorded for BFI-10 trait: {trait_name}")
+            logger.warning(f"No valid scores recorded for BFI-10 trait: {trait_name} (Code: {trait_code})")
     return final_scores
 
 @app.post("/quiz/{quiz_id}/submit", name="submit_quiz_route")
 async def submit_quiz_route(
     request: Request,
     quiz_id: str,
-    answers: str = Form(...),
+    answers: str = Form(...), # answers is a JSON string from the form
     current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)
 ):
     logger.info(f"Quiz submission for quiz_id: {quiz_id} by user: {current_user['email']}")
     logger.debug(f"Raw answers JSON string from form: {answers}")
 
-    # MODIFIED HERE:
     if reports_collection is None:
-        logger.error("Reports collection is not available (reports_collection is None). Cannot save quiz submission.")
+        logger.error("Reports collection is not available. Cannot save quiz submission.")
         raise HTTPException(status_code=503, detail="Database service unavailable. Cannot save quiz results.")
-
 
     all_quiz_definitions = load_quizzes_data()
     quiz_detail = next((q for q in all_quiz_definitions.get("quizzes", []) if q["id"] == quiz_id), None)
@@ -2922,7 +3011,8 @@ async def submit_quiz_route(
         raise HTTPException(status_code=404, detail=f"Quiz ID: {quiz_id} not found.")
 
     try:
-        user_answers_dict = json.loads(answers)
+        # user_answers_dict will have string keys, and values can be numbers or strings
+        user_answers_dict: Dict[str, Any] = json.loads(answers)
         logger.debug(f"Parsed user answers: {user_answers_dict}")
     except json.JSONDecodeError as e:
         logger.error(f"Invalid answers JSON format from user {current_user['email']} for quiz {quiz_id}: {e}")
@@ -2930,34 +3020,46 @@ async def submit_quiz_route(
 
     quiz_questions = quiz_detail.get("questions", [])
     report_score: Union[str, Dict[str, Optional[float]]]
-    report_type = "standard"
+    report_type = "standard" # Default report type
 
     if quiz_id == "bfi-10":
         report_type = "bfi-10"
-        answered_question_ids = user_answers_dict.keys()
-        expected_question_ids = {str(q.get("id")) for q in quiz_questions}
-        if not expected_question_ids.issubset(answered_question_ids) or \
-           any(user_answers_dict.get(qid) is None for qid in expected_question_ids):
-            logger.warning(f"BFI-10 submission by {current_user['email']} incomplete. Expected {len(quiz_questions)} answers for IDs {expected_question_ids}, got answers for {answered_question_ids} with values {user_answers_dict}")
-            pass
+        # Ensure BFI-10 answers are numeric, as expected by calculate_bfi10_scores
+        bfi_numeric_answers: Dict[str, Union[int, float]] = {}
+        all_answers_valid = True
+        for q_def in quiz_questions:
+            q_id_str = str(q_def.get("id"))
+            ans_val = user_answers_dict.get(q_id_str)
+            try:
+                bfi_numeric_answers[q_id_str] = float(ans_val) # Convert to float
+            except (ValueError, TypeError):
+                logger.error(f"BFI-10 answer for Q_ID {q_id_str} is not convertible to float: {ans_val}. User: {current_user['email']}")
+                all_answers_valid = False
+                # Optionally, you might want to assign a default or skip, but erroring out is safer if all answers are required.
+                # For now, calculate_bfi10_scores will skip invalid ones.
 
-        bfi_scores = calculate_bfi10_scores(quiz_questions, user_answers_dict)
-        report_score = bfi_scores
-        logger.info(f"User {current_user['email']} BFI-10 scores: {bfi_scores}")
-    else:
+        # If strict validation is needed:
+        # if not all_answers_valid:
+        #     raise HTTPException(status_code=400, detail="One or more BFI-10 answers were not valid numbers.")
+
+        report_score = calculate_bfi10_scores(quiz_questions, bfi_numeric_answers)
+        logger.info(f"User {current_user['email']} BFI-10 scores: {report_score}")
+
+    else: # Standard quiz scoring
         correct_answers_count = 0
         total_questions = len(quiz_questions)
         if total_questions > 0:
             for question in quiz_questions:
                 question_id_str = str(question.get("id"))
-                user_answer = user_answers_dict.get(question_id_str)
-                correct_answer = question.get("answer")
+                user_answer = user_answers_dict.get(question_id_str) # User answer could be string or number from JSON
+                correct_answer = question.get("answer") # Correct answer from quizzes_data.json
+                # Compare as strings to handle type discrepancies (e.g., "8" vs 8)
                 if user_answer is not None and str(user_answer) == str(correct_answer):
                     correct_answers_count += 1
-            score_percentage = (correct_answers_count / total_questions) * 100 if total_questions > 0 else 0
+            score_percentage = (correct_answers_count / total_questions) * 100
         else:
             score_percentage = 0
-        report_score = f"{score_percentage:.0f}%"
+        report_score = f"{score_percentage:.0f}%" # Format as whole number percentage string
         logger.info(f"User {current_user['email']} scored {report_score} on quiz {quiz_id}.")
 
     new_report_id = f"rep_{uuid4().hex[:10]}"
@@ -2967,22 +3069,24 @@ async def submit_quiz_route(
         "quiz_id": quiz_id,
         "quiz_title": quiz_detail.get('title', 'Untitled Quiz'),
         "quiz_description": quiz_detail.get('description', 'No description available.'),
-        "score": report_score,
+        "score": report_score, # Can be Dict for BFI-10 or string for others
         "date_taken": datetime.utcnow(),
-        "answers_submitted": user_answers_dict,
+        "answers_submitted": user_answers_dict, # Store the original parsed answers
         "report_type": report_type
     }
 
     try:
-        # reports_collection is already confirmed to be not None
         insert_result = reports_collection.insert_one(new_report_doc)
+        # PyMongo's insert_one returns InsertOneResult, _id is on insert_result.inserted_id
         logger.info(f"New report {new_report_id} (MongoDB _id: {insert_result.inserted_id}) saved for user {current_user['email']}.")
     except Exception as e:
-        logger.error(f"Error saving report {new_report_id} to MongoDB: {e}")
+        logger.error(f"Error saving report {new_report_id} to MongoDB for user {current_user['email']}: {e}")
         raise HTTPException(status_code=500, detail="Failed to save quiz results due to a database error.")
 
+    # Redirect to the specific report page using the custom 'id'
     report_page_url = app.url_path_for("report_page_route", report_id=new_report_id)
     logger.info(f"Redirecting user {current_user['email']} to report page: {report_page_url}")
+    # Using 303 See Other for redirect after POST
     return RedirectResponse(url=report_page_url, status_code=303)
 
 
@@ -2994,45 +3098,44 @@ async def report_page_route(
 ):
     logger.info(f"User {current_user['email']} requesting report page for report_id: {report_id}")
 
-    # MODIFIED HERE:
     if reports_collection is None:
-        logger.error(f"Reports collection unavailable (reports_collection is None) when trying to view report {report_id}")
+        logger.error(f"Reports collection unavailable when trying to view report {report_id}")
         raise HTTPException(status_code=503, detail="Database service unavailable. Cannot load report.")
 
     try:
-        # reports_collection is already confirmed to be not None
+        # Query using the custom 'id' field, not MongoDB's '_id'
         report_detail = reports_collection.find_one({"id": report_id, "user_id": current_user["id"]})
     except Exception as e:
-        logger.error(f"Error fetching report {report_id} from MongoDB: {e}")
+        logger.error(f"Error fetching report {report_id} from MongoDB for user {current_user['email']}: {e}")
         raise HTTPException(status_code=500, detail="Failed to load report due to a database error.")
 
     if not report_detail:
         logger.warning(f"Report ID: {report_id} not found or access denied for user {current_user['email']}.")
         raise HTTPException(status_code=404, detail=f"Report ID: {report_id} not found or access denied.")
 
-
     context = {
         "request": request,
         "title": f"Report: {html.escape(report_detail.get('quiz_title', 'Quiz Report'))}",
         "user": current_user,
-        "report": report_detail
+        "report": report_detail # Pass the full report document
     }
 
     if report_detail.get("report_type") == "bfi-10" and isinstance(report_detail.get("score"), dict):
-        trait_scores = report_detail["score"]
+        trait_scores: Dict[str, Optional[float]] = report_detail["score"]
         radar_labels = ["Extraversion", "Agreeableness", "Conscientiousness", "Neuroticism", "Openness"]
-        radar_data = [trait_scores.get(label, 0) for label in radar_labels]
+        # Handle None scores for radar data by defaulting to 0 or another placeholder
+        radar_data = [trait_scores.get(label, 0.0) if trait_scores.get(label) is not None else 0.0 for label in radar_labels]
 
         context["radar_chart_labels"] = radar_labels
         context["radar_chart_data"] = radar_data
 
         table_data = []
         for trait in radar_labels:
-            score = trait_scores.get(trait)
-            interpretation = get_bfi10_interpretation_details(trait, score)
+            score_value = trait_scores.get(trait) # This can be float or None
+            interpretation = get_bfi10_interpretation_details(trait, score_value)
             table_data.append({
                 "trait": trait,
-                "score": score if score is not None else "N/A",
+                "score": score_value if score_value is not None else "N/A",
                 "interpretation_level": interpretation["level"],
                 "interpretation_description": interpretation["level_specific_description"],
                 "general_trait_description": interpretation["general_trait_description"]
@@ -3045,20 +3148,32 @@ async def report_page_route(
         return templates.TemplateResponse("report_page.html", context)
 
 
-# --- Main Execution ---
+# --- Main Execution (for local development) ---
 if __name__ == "__main__":
     import uvicorn
-    # MODIFIED HERE:
-    if reports_collection is None: # Check if None after connection attempt
-        logger.critical("Application will start WITH MongoDB features DISABLED due to connection/configuration issues (reports_collection is None).")
+    # This check is informative for local runs; DB connection status is handled by lifespan.
+    logger.info("Attempting to run Uvicorn for local development...")
+    if os.getenv("MONGO_URI") and reports_collection is None and app.router.lifespan_context:
+         # If MONGO_URI is set, we expect a connection. If reports_collection is still None
+         # after lifespan should have run (or tried to run connect_to_mongo on import if lifespan isn't used),
+         # it means connection likely failed.
+         logger.warning(
+            "MongoDB URI is set, but reports_collection is None. "
+            "Database features might be unavailable if connection failed during startup."
+        )
+    elif not os.getenv("MONGO_URI"):
+        logger.warning("MONGO_URI not set. MongoDB features will be disabled.")
 
+
+    # For local development, it's fine to use reload.
+    # The Uvicorn command in Dockerfile is what's used for deployment.
     uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        reload_dirs=[str(BASE_DIR)],
-        log_level="info"
+        "app.main:app", # Correctly reference the app instance within the package
+        host=os.getenv("HOST", "0.0.0.0"), # HOST for Render
+        port=int(os.getenv("PORT", 8000)), # PORT for Render
+        reload=True, # Enable reload for local development
+        reload_dirs=[str(BASE_DIR.parent)], # Watch the parent of 'app' (project root)
+        log_level=os.getenv("LOG_LEVEL", "info").lower()
     )
 </file>
 
@@ -3259,36 +3374,24 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app # Mount app directory for live reload
-    env_file: # <--- ADD THIS SECTION
+      - ./app:/app_root/app # Mount your local 'app' directory to '/app_root/app' in the container
+    env_file:
       - ./.env
     environment:
-      - PYTHONUNBUFFERED=1 # Ensures print statements and logs are sent straight to terminal
-      # For development, you might want to explicitly set the host if running behind a proxy
-      # or if having issues with Uvicorn's auto-detection.
-      # - APP_HOST=0.0.0.0
-</file>
-
-<file path="Dockerfile">
-# Dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-
-COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY ./app /app/
-
-EXPOSE 8000
-
-# Run Uvicorn with reload for development.
-# --reload-dir watches the specified directory (and subdirectories) for changes.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+      - PYTHONUNBUFFERED=1
+      # For local development with reload, you might override the CMD
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "/app_root/app",
+      ]
 </file>
 
 <file path="requirements.txt">
@@ -3299,6 +3402,38 @@ jinja2
 python-multipart
 pymongo
 python-dotenv
+</file>
+
+<file path="Dockerfile">
+# Dockerfile
+FROM python:3.9-slim
+
+# WORKDIR sets the working directory for subsequent commands like COPY and CMD
+WORKDIR /app_root # Use a different name for WORKDIR to avoid confusion with package name
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONPATH="/app_root"
+
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy your 'app' package directory into '/app_root/app'
+COPY ./app /app_root/app/
+# Copy quizzes_data.json if it's inside your local 'app' directory to the correct place
+# The path in load_quizzes_data is relative to main.py (BASE_DIR)
+# BASE_DIR = Path(__file__).resolve().parent -> /app_root/app
+# QUIZZES_DATA_FILE = BASE_DIR / "quizzes_data.json" -> /app_root/app/quizzes_data.json
+# So, quizzes_data.json should be inside the 'app' package next to main.py
+# The `COPY ./app /app_root/app/` already handles this if quizzes_data.json is in your local `app` folder.
+
+EXPOSE 8000
+
+# Production command for Render
+# Uvicorn will look for the 'app' package (now at /app_root/app),
+# then 'main.py' inside it, then the 'app' instance.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 </file>
 
 </files>

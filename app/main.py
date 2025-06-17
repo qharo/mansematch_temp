@@ -299,6 +299,8 @@ async def quiz_page_route(
         "quiz": quiz_detail
     })
 
+
+
 def calculate_bfi10_scores(questions: List[Dict[str, Any]], user_answers_dict: Dict[str, Union[int, float]]) -> Dict[str, Optional[float]]:
     scores: Dict[str, List[float]] = {"E": [], "A": [], "C": [], "N": [], "O": []}
     trait_map = {
@@ -446,6 +448,9 @@ async def submit_quiz_route(
     # Using 303 See Other for redirect after POST
     return RedirectResponse(url=report_page_url, status_code=303)
 
+@app.get("/healthz", status_code=200)
+async def health_check_route():
+    return {"status": "ok"}
 
 @app.get("/report/{report_id}", name="report_page_route")
 async def report_page_route(
