@@ -1,0 +1,253 @@
+<!-- app/templates/big_five_report.html -->
+{% extends "base.html" %} {% block content %}
+<div class="container mx-auto px-4 py-8 mt-6">
+    <!-- Back to Dashboard Arrow Button -->
+    <div class="mb-4">
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
+        >
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+        </a>
+    </div>
+
+    <div class="bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <div class="mb-8 pb-6 border-b border-gray-200">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                {{ report.quiz_title | e }}
+            </h1>
+            <p class="text-md text-gray-500">
+                Completed on: {{ report.date_taken.strftime('%B %d, %Y at
+                %H:%M') if report.date_taken else 'N/A' }}
+            </p>
+        </div>
+
+        <div class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-3">
+                About the Big Five
+            </h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ report.quiz_description | e if report.quiz_description else
+                "The Big Five model is a widely accepted framework for
+                understanding personality, categorizing traits into five broad
+                dimensions: Openness, Conscientiousness, Extraversion,
+                Agreeableness, and Neuroticism." }}
+            </p>
+        </div>
+
+        <!-- Radar Chart Section -->
+        <section class="mb-12 p-6 bg-gray-50 rounded-lg shadow-inner">
+            <!-- Removed: <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Your Personality Profile</h2> -->
+            <div class="max-w-xl mx-auto">
+                <canvas id="bfiRadarChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Table with Trait, Score, and Interpretation Section -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">
+                Detailed Trait Analysis
+            </h2>
+            <div class="overflow-x-auto">
+                <table
+                    class="min-w-full bg-white border border-gray-200 rounded-lg shadow"
+                >
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Trait
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Your Score (1-5)
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Interpretation Level
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Description
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for item in bfi_table_data %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">
+                                    {{ item.trait | e }}
+                                </div>
+                                <div class="text-xs text-gray-500">
+                                    {{ item.general_trait_description | e }}
+                                </div>
+                            </td>
+                            <td
+                                class="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                            >
+                                {{ "%.2f" | format(item.score) if item.score !=
+                                'N/A' else 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span
+                                    class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {% if item.interpretation_level == 'Low' %} bg-blue-100 text-blue-800 {% elif item.interpretation_level == 'Average' %} bg-yellow-100 text-yellow-800 {% elif item.interpretation_level == 'High' %} bg-green-100 text-green-800 {% else %} bg-gray-100 text-gray-800 {% endif %}"
+                                >
+                                    {{ item.interpretation_level | e }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-600">
+                                {{ item.interpretation_description | e }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const ctx = document.getElementById('bfiRadarChart');
+
+        if (!ctx) {
+            console.error("Radar chart canvas element 'bfiRadarChart' not found.");
+            return;
+        }
+
+        let radarLabelsFromJinja;
+        let radarDataFromJinja;
+
+        try {
+            radarLabelsFromJinja = {{ radar_chart_labels | json_dumps | safe }};
+            radarDataFromJinja = {{ radar_chart_data | json_dumps | safe }};
+        } catch (e) {
+            console.error("Error parsing Jinja chart data variables:", e);
+            const chartContainer = ctx.parentElement;
+            if (chartContainer) {
+                chartContainer.innerHTML = '<p class="text-center text-red-500">Error loading chart data. Check console.</p>';
+            }
+            return;
+        }
+
+        // console.log("Raw radarLabels from Jinja:", radarLabelsFromJinja); // Keep for debugging if needed
+        // console.log("Raw radarData from Jinja:", radarDataFromJinja); // Keep for debugging if needed
+
+        const isValidArray = (arr) => Array.isArray(arr) && arr.length > 0;
+
+        if (isValidArray(radarLabelsFromJinja) &&
+            isValidArray(radarDataFromJinja) &&
+            radarLabelsFromJinja.length === radarDataFromJinja.length) {
+
+            try {
+                new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: radarLabelsFromJinja,
+                        datasets: [{
+                            label: 'Your Score', // This label is used by tooltips, but the legend itself is hidden
+                            data: radarDataFromJinja,
+                            fill: true,
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgb(54, 162, 235)',
+                            pointBackgroundColor: 'rgb(54, 162, 235)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgb(54, 162, 235)'
+                        }]
+                    },
+                    options: {
+                        elements: {
+                            line: {
+                                borderWidth: 3
+                            }
+                        },
+                        scales: {
+                            r: {
+                                angleLines: {
+                                    display: true
+                                },
+                                suggestedMin: 0,
+                                suggestedMax: 5,
+                                pointLabels: {
+                                    font: {
+                                        size: 13
+                                    }
+                                },
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false // MODIFICATION: Hide the legend
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || ''; // Tooltip can still use the dataset label
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.r !== null) {
+                                            label += context.parsed.r.toFixed(2);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                // console.log("Chart initialized successfully."); // Keep for debugging if needed
+            } catch (chartError) {
+                console.error("Error initializing Chart.js:", chartError);
+                const chartContainer = ctx.parentElement;
+                if (chartContainer) {
+                    chartContainer.innerHTML = '<p class="text-center text-red-500">Could not display chart. See console for details.</p>';
+                }
+            }
+        } else {
+            console.warn("Radar chart data is missing, empty, or mismatched. Chart will not be rendered.", {
+                labels: radarLabelsFromJinja,
+                data: radarDataFromJinja,
+                labelsValid: isValidArray(radarLabelsFromJinja),
+                dataValid: isValidArray(radarDataFromJinja),
+                lengthsMatch: radarLabelsFromJinja && radarDataFromJinja ? radarLabelsFromJinja.length === radarDataFromJinja.length : false
+            });
+            const chartContainer = ctx.parentElement;
+            if (chartContainer) {
+                let messageP = chartContainer.querySelector('.chart-message');
+                if (!messageP) {
+                    messageP = document.createElement('p');
+                    messageP.className = 'text-center text-gray-500 chart-message';
+                    chartContainer.appendChild(messageP);
+                }
+                messageP.textContent = 'Personality profile chart data is not available or is incomplete.';
+            }
+        }
+    });
+</script>
+{% endblock %}

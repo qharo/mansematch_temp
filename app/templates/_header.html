@@ -1,0 +1,103 @@
+<!-- app/templates/_header.html -->
+<header class="bg-white shadow-md sticky top-0 z-50">
+    <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
+        <a
+            href="/"
+            class="text-2xl font-bold text-blue-600 hover:text-blue-700 transition-colors"
+            >mansematch</a
+        >
+        <div>
+            {% set display_user = user if user is defined else
+            request.state.user %} {% if display_user %}
+            <!-- Profile Dropdown -->
+            <div
+                x-data="{ open: false }"
+                class="relative"
+                @keydown.escape.window="open = false"
+                @click.outside="open = false"
+            >
+                <button
+                    @click="open = !open"
+                    class="rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    aria-label="User menu"
+                    aria-haspopup="true"
+                    :aria-expanded="open.toString()"
+                >
+                    <img
+                        src="https://api.dicebear.com/8.x/bottts-neutral/svg?seed={{ display_user.email | urlencode if display_user.email else 'default-user' }}"
+                        alt="{{ display_user.email if display_user.email else 'User' }} avatar"
+                        class="h-10 w-10 rounded-full"
+                    />
+                </button>
+
+                <div
+                    x-show="open"
+                    x-transition:enter="transition ease-out duration-100"
+                    x-transition:enter-start="transform opacity-0 scale-95"
+                    x-transition:enter-end="transform opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-75"
+                    x-transition:leave-start="transform opacity-100 scale-100"
+                    x-transition:leave-end="transform opacity-0 scale-95"
+                    class="absolute right-0 mt-2 w-56 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50"
+                    role="menu"
+                    aria-orientation="vertical"
+                    aria-labelledby="user-menu-button"
+                    tabindex="-1"
+                    x-cloak
+                >
+                    <div class="py-1" role="none">
+                        <div class="px-4 py-3">
+                            {# Removed "Signed in as" text #}
+                            <p
+                                class="text-sm font-medium text-gray-800 truncate"
+                                role="none"
+                            >
+                                {{ display_user.email }}
+                            </p>
+                        </div>
+                        <hr class="border-gray-200" />
+                        <a
+                            href="#"
+                            {#
+                            Replace
+                            with
+                            actual
+                            settings
+                            page
+                            URL
+                            later
+                            #}
+                            class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                            role="menuitem"
+                            tabindex="-1"
+                            id="user-menu-item-0"
+                            @click="open = false"
+                        >
+                            Settings
+                        </a>
+                        <button
+                            hx-post="/logout"
+                            hx-target="body"
+                            hx-swap="outerHTML"
+                            class="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                            role="menuitem"
+                            tabindex="-1"
+                            id="user-menu-item-1"
+                            @click="open = false"
+                        >
+                            Sign Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <a
+                href="/auth"
+                class="bg-blue-500 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+            >
+                Sign In
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+</header>

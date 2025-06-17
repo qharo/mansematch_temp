@@ -1,0 +1,27 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app_root/app # Mount your local 'app' directory to '/app_root/app' in the container
+    env_file:
+      - ./.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      # For local development with reload, you might override the CMD
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "/app_root/app",
+      ]

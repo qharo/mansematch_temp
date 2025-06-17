@@ -1,0 +1,171 @@
+<file path="app/templates/auth.html">
+    <!-- app/templates/auth.html -->
+    {% extends "base.html" %} {% block content %}
+
+    <script>
+        function handleAuthResponse(event) {
+            const xhr = event.detail.xhr;
+            const successful = event.detail.successful; // true for 2xx or 3xx status codes
+            const redirectUrl = xhr.getResponseHeader("HX-Redirect");
+
+            // Priority 1: Handle redirection if HX-Redirect header is present
+            if (redirectUrl) {
+                window.location.href = redirectUrl;
+                return; // Stop further processing in this function
+            }
+
+            // Priority 2: Handle actual errors (if no redirect and request was not successful)
+            // This block will only be reached if there was no HX-Redirect.
+            if (!successful) {
+                const messageDiv = document.getElementById("auth-message");
+                if (messageDiv) {
+                    // HTMX will have already attempted to swap the server's error response
+                    // into #auth-message due to hx-target and hx-swap on the form.
+                    // This check is for the case where the server sends an error status
+                    // but with an empty response body.
+                    const currentContent = messageDiv.innerHTML.trim();
+                    if (currentContent === "") {
+                        // Display a generic fallback error message.
+                        messageDiv.innerHTML =
+                            '<p class="text-red-600">An unexpected error occurred. Please try again.</p>';
+                    }
+                    // If currentContent is not empty, it means HTMX successfully swapped in
+                    // an error message from the server (e.g., "Invalid credentials"),
+                    // so we don't overwrite it.
+                }
+            }
+            // If there was no HX-Redirect AND the request was successful (e.g., a 200 OK
+            // with content meant for swapping but not a redirect scenario), HTMX handles
+            // the swap based on hx-swap attributes, and this function doesn't need
+            // to do anything further for that case.
+        }
+    </script>
+
+    <div class="container mx-auto px-4 py-8 mt-6">
+        <div
+            class="max-w-lg mx-auto bg-white p-8 rounded-xl shadow-2xl"
+            x-data="{ currentTab: 'signin' }"
+            x-cloak
+        >
+            <div class="flex border-b mb-8">
+                <button
+                    @click="currentTab = 'signin'"
+                    :class="{ 'border-blue-600 text-blue-600 font-semibold': currentTab === 'signin', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': currentTab !== 'signin' }"
+                    class="w-1/2 py-3 text-center text-lg border-b-2 focus:outline-none transition-all"
+                >
+                    Sign In
+                </button>
+                <button
+                    @click="currentTab = 'signup'"
+                    :class="{ 'border-blue-600 text-blue-600 font-semibold': currentTab === 'signup', 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300': currentTab !== 'signup' }"
+                    class="w-1/2 py-3 text-center text-lg border-b-2 focus:outline-none transition-all"
+                >
+                    Sign Up
+                </button>
+            </div>
+
+            <!-- Sign In Form -->
+            <div x-show="currentTab === 'signin'" x-transition>
+                <h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">
+                    Sign In to Your Account
+                </h2>
+                <form
+                    hx-post="/login"
+                    hx-target="#auth-message"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="handleAuthResponse(event)"
+                >
+                    <div
+                        id="auth-message"
+                        class="mb-4 text-center min-h-[24px]"
+                    ></div>
+                    <div class="mb-6">
+                        <label
+                            for="email_signin"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                            >Email Address</label
+                        >
+                        <input
+                            type="email"
+                            name="email"
+                            id="email_signin"
+                            required
+                            class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            value="user1@example.com"
+                        />
+                    </div>
+                    <div class="mb-8">
+                        <label
+                            for="password_signin"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                            >Password</label
+                        >
+                        <input
+                            type="password"
+                            name="password"
+                            id="password_signin"
+                            required
+                            class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            value="password123"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition-colors text-lg"
+                    >
+                        Sign In
+                    </button>
+                </form>
+            </div>
+
+            <!-- Sign Up Form (Placeholder) -->
+            <div x-show="currentTab === 'signup'" x-transition>
+                <h2 class="text-3xl font-bold text-gray-800 mb-8 text-center">
+                    Create an Account
+                </h2>
+                <p class="text-gray-600 text-center mb-6">
+                    Sign up functionality is not yet implemented in this POC.
+                </p>
+                <form @submit.prevent="alert('Sign up is currently disabled.')">
+                    <div class="mb-6">
+                        <label
+                            for="email_signup"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                            >Email Address</label
+                        >
+                        <input
+                            type="email"
+                            name="email_signup"
+                            id="email_signup"
+                            class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="your.email@example.com"
+                            disabled
+                        />
+                    </div>
+                    <div class="mb-8">
+                        <label
+                            for="password_signup"
+                            class="block text-sm font-medium text-gray-700 mb-1"
+                            >Password</label
+                        >
+                        <input
+                            type="password"
+                            name="password_signup"
+                            id="password_signup"
+                            class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="********"
+                            disabled
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        class="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline opacity-50 cursor-not-allowed transition-colors text-lg"
+                    >
+                        Sign Up (Disabled)
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</file>

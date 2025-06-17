@@ -1,0 +1,184 @@
+{
+  "quizzes": [
+    {
+      "id": "bfi-10",
+      "title": "Big Five Personality Quiz",
+      "description": "A short 10-item measure of the Big Five personality dimensions.",
+      "questions": [
+        {
+          "id": "bfi_1",
+          "text": "...is reserved.",
+          "type": "multiple-choice",
+          "key": "E_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_2",
+          "text": "...is generally trusting.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_3",
+          "text": "...tends to be lazy.",
+          "type": "multiple-choice",
+          "key": "C_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_4",
+          "text": "...is relaxed, handles stress well.",
+          "type": "multiple-choice",
+          "key": "N_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_5",
+          "text": "...has few artistic interests.",
+          "type": "multiple-choice",
+          "key": "O_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_6",
+          "text": "...is outgoing, sociable.",
+          "type": "multiple-choice",
+          "key": "E",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_7",
+          "text": "...tends to find fault with others.",
+          "type": "multiple-choice",
+          "key": "A_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_8",
+          "text": "...does a thorough job.",
+          "type": "multiple-choice",
+          "key": "C",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_9",
+          "text": "...gets nervous easily.",
+          "type": "multiple-choice",
+          "key": "N",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_10",
+          "text": "...has an active imagination.",
+          "type": "multiple-choice",
+          "key": "O",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q1",
+      "title": "Basic Python Quiz",
+      "description": "Test your fundamental Python knowledge.",
+      "questions": [
+        {
+          "id": "q1_1",
+          "text": "What is the output of print(2**3)?",
+          "type": "multiple-choice",
+          "options": ["5", "6", "8", "9"],
+          "answer": "8"
+        },
+        {
+          "id": "q1_2",
+          "text": "Which keyword is used to define a function in Python?",
+          "type": "multiple-choice",
+          "options": ["func", "def", "function", "define"],
+          "answer": "def"
+        },
+        {
+          "id": "q1_3",
+          "text": "What is the correct file extension for Python files? (e.g. '.py')",
+          "type": "multiple-choice",
+          "options": [".pyth", ".pt", ".pi", ".py"],
+          "answer": ".py"
+        }
+      ]
+    }
+  ],
+  "reports": [
+    {
+      "id": "r1",
+      "user_id": "user1",
+      "quiz_id": "q1",
+      "quiz_title": "Basic Python Quiz",
+      "score": "67%",
+      "date_taken": "2023-10-25",
+      "answers_submitted": {
+        "q1_1": "8",
+        "q1_2": "def",
+        "q1_3": ".pyth"
+      }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+<!-- app/templates/index.html -->
+{% extends "base.html" %} {% block content %}
+
+<!-- Banner Section -->
+<section
+    class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-48 shadow-xl"
+>
+    {# Increased py-32 (from previous) to py-48 for more height. No top margin
+    needed. #}
+    <div class="container mx-auto px-6 text-center">
+        <h1 class="text-5xl font-bold mb-6">
+            Welcome to Your SaaS Quiz Platform!
+        </h1>
+        <p class="text-xl text-blue-100 mb-10">
+            The simplest way to create, take, and manage quizzes.
+        </p>
+        <a
+            href="#email-form-section"
+            {#
+            Point
+            to
+            the
+            section
+            wrapper
+            #}
+            class="bg-white text-indigo-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition duration-300 transform hover:scale-105 text-lg"
+        >
+            Get Started
+        </a>
+    </div>
+</section>
+
+<!-- Email Submission Form Section -->
+<section id="email-form-section" class="py-16">
+    {# This section has its own vertical padding. The body background
+    (bg-gray-100) will be visible between the banner and this section. #}
+    <div class="container mx-auto px-6">
+        <div
+            class="max-w-2xl mx-auto bg-white p-8 md:p-12 rounded-lg shadow-xl text-center"
+        >
+            <h2 class="text-3xl font-semibold text-gray-800 mb-6">
+                Stay Updated!
+            </h2>
+            <p class="text-gray-600 mb-8">
+                Subscribe to our newsletter for the latest features and updates.
+            </p>
+            <form
+                hx-post="/subscribe"
+                hx-target="#subscribe-response"
+                hx-swap="innerHTML"
+                class="w-full"
+            >
+                <div class="flex flex-col sm:flex-row items-center gap-4">
+                    <input
+                        class="appearance-none bg-gray-50 border border-gray-300 rounded-md w-full text-gray-700 py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-blue-500"
+                        type="email"
+                        name="email"
+                        placeholder="your.email@example.com"
+                        aria-label="Email address"
+                        required
+                    />
+                    <button
+                        class="flex-shrink-0 bg-blue-500 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors w-full sm:w-auto"
+                        type="submit"
+                    >
+                        Subscribe
+                    </button>
+                </div>
+                <div id="subscribe-response" class="mt-4 text-sm min-h-[20px]">
+                    <!-- HTMX response will be injected here -->
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

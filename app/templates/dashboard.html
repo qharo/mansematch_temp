@@ -1,0 +1,108 @@
+<!-- app/templates/dashboard.html -->
+{% extends "base.html" %} {% block content %}
+<div class="container mx-auto px-4 py-8 mt-6">
+    <!-- Quizzes Section -->
+    <section class="mb-16">
+        <h2 class="text-3xl font-semibold text-gray-700 mb-8 border-b pb-3">
+            Available Quizzes
+        </h2>
+        {% if quizzes %}
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {% for quiz in quizzes %}
+            <div
+                class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col justify-between"
+            >
+                <div>
+                    <h3 class="text-2xl font-bold text-blue-600 mb-3">
+                        {{ quiz.title }}
+                    </h3>
+                    <p class="text-gray-600 mb-6 text-sm">
+                        {{ quiz.description }}
+                    </p>
+                </div>
+                <a
+                    href="{{ url_for('quiz_page_route', quiz_id=quiz.id) }}"
+                    class="block text-center mt-auto bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-md transition-colors w-full"
+                >
+                    Take Quiz
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-600 italic">
+            No quizzes available at the moment. Check back soon!
+        </p>
+        {% endif %}
+    </section>
+
+    <!-- Reports Section -->
+    <section>
+        <h2 class="text-3xl font-semibold text-gray-700 mb-8 border-b pb-3">
+            Your Quiz Reports
+        </h2>
+        {% if reports %}
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <ul class="divide-y divide-gray-200">
+                {% for report in reports %}
+                <li class="py-5">
+                    <div
+                        class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+                    >
+                        <div>
+                            <h4 class="text-xl font-medium text-gray-800">
+                                {{ report.quiz_title }}
+                            </h4>
+                            <p class="text-sm text-gray-500">
+                                Taken on: {{
+                                report.date_taken.strftime('%Y-%m-%d %H:%M') if
+                                report.date_taken else 'N/A' }}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-4 mt-2 sm:mt-0">
+                            <div class="text-right">
+                                {% if report.report_type == 'bfi-10' and
+                                report.score is mapping %}
+                                <span
+                                    class="text-sm font-semibold text-gray-700 block"
+                                    >Personality Profile</span
+                                >
+                                <span class="text-xs text-gray-500"
+                                    >(Detailed Report)</span
+                                >
+                                {% elif report.score is string %} {# Standard
+                                percentage score #}
+                                <span
+                                    class="text-2xl font-semibold {% if report.score.replace('%','') | int >= 80 %}text-green-600 {% elif report.score.replace('%','') | int >= 50 %}text-yellow-600 {% else %}text-red-600{% endif %}"
+                                >
+                                    {{ report.score }}
+                                </span>
+                                {% else %}
+                                <span
+                                    class="text-lg font-semibold text-gray-500"
+                                    >N/A</span
+                                >
+                                {% endif %}
+                            </div>
+                            <a
+                                href="{{ url_for('report_page_route', report_id=report.id) }}"
+                                class="text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+                            >
+                                View Report
+                            </a>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <p class="text-gray-600 italic">
+            You haven't completed any quizzes yet. Start a quiz to see your
+            reports!
+        </p>
+        {% endif %}
+        <!-- Removed report-details-area as full page reports are now used -->
+    </section>
+</div>
+{% endblock %}

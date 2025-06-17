@@ -1,0 +1,76 @@
+<!-- app/templates/report_page.html -->
+{% extends "base.html" %} {% block content %}
+<div class="container mx-auto px-4 py-8 mt-6">
+    <!-- Back to Dashboard Arrow Button -->
+    <div class="mb-4">
+        <!-- Increased mb slightly for better spacing before the white card -->
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
+        >
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+            <!-- Optional: add text here if desired, e.g., <span class="ml-2">Back</span> -->
+        </a>
+    </div>
+
+    <div class="bg-white p-8 rounded-xl shadow-2xl">
+        <div class="mb-6 pb-4 border-b">
+            <h1 class="text-4xl font-bold text-gray-800">
+                {{ report.quiz_title | e }}
+            </h1>
+            <p class="text-md text-gray-600 mt-2">
+                Completed on: {{ report.date_taken.strftime('%B %d, %Y at
+                %H:%M') if report.date_taken else 'N/A' }}
+            </p>
+        </div>
+
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-3">
+                Quiz Description
+            </h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ report.quiz_description | e if report.quiz_description else
+                "No description provided for this quiz." }}
+            </p>
+        </div>
+
+        <div class="mb-8">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-3">
+                Your Score
+            </h2>
+            {% if report.score is string %}
+            <p
+                class="text-5xl font-bold {% if report.score.replace('%','') | int >= 80 %}text-green-600{% elif report.score.replace('%','') | int >= 50 %}text-yellow-500{% else %}text-red-600{% endif %}"
+            >
+                {{ report.score | e }}
+            </p>
+            {% else %}
+            <p class="text-gray-600">
+                Score information is not available in a simple format for this
+                quiz type. Please see specific details if provided.
+            </p>
+            {% endif %}
+        </div>
+
+        <!-- Answers Submitted section removed -->
+
+        <!-- Back to Dashboard button at the bottom removed -->
+    </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<!-- Add any page-specific JS here if needed -->
+{% endblock %}
