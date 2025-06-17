@@ -5,28 +5,27 @@
 <section
     class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-48 shadow-xl"
 >
-    {# Increased py-32 (from previous) to py-48 for more height. No top margin
-    needed. #}
     <div class="container mx-auto px-6 text-center">
-        <h1 class="text-5xl font-bold mb-6">
-            Welcome to Your SaaS Quiz Platform!
-        </h1>
+        <h1 class="text-5xl font-bold mb-6">Welcome to mansematch</h1>
         <p class="text-xl text-blue-100 mb-10">
-            The simplest way to create, take, and manage quizzes.
+            Using AI to further gain insights into one's own personality and
+            compatibility.
         </p>
+        {% if request.state.user %}
         <a
-            href="#email-form-section"
-            {#
-            Point
-            to
-            the
-            section
-            wrapper
-            #}
+            href="{{ url_for('dashboard_page_route') }}"
             class="bg-white text-indigo-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition duration-300 transform hover:scale-105 text-lg"
         >
-            Get Started
+            Go to Dashboard
         </a>
+        {% else %}
+        <a
+            href="{{ url_for('auth_page_route') }}"
+            class="bg-white text-indigo-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition duration-300 transform hover:scale-105 text-lg"
+        >
+            Sign In to Get Started
+        </a>
+        {% endif %}
     </div>
 </section>
 

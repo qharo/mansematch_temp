@@ -1,0 +1,276 @@
+<!-- app/templates/mas_report.html -->
+{% extends "base.html" %} {% block content %}
+<div class="container mx-auto px-4 py-8 mt-6">
+    <!-- Back to Dashboard Arrow Button -->
+    <div class="mb-4">
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
+        >
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+        </a>
+    </div>
+
+    <div class="bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <div class="mb-8 pb-6 border-b border-gray-200">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                {{ report.quiz_title | e }}
+            </h1>
+            <p class="text-md text-gray-500">
+                Completed on: {{ report.date_taken.strftime('%B %d, %Y at
+                %H:%M') if report.date_taken else 'N/A' }}
+            </p>
+        </div>
+
+        <div class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-3">
+                About the Money Attitude Scale (MAS)
+            </h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ report.quiz_description | e if report.quiz_description else
+                "The Money Attitude Scale (MAS) helps understand an individual's
+                attitudes towards money across several key dimensions. This
+                report highlights your tendencies in areas like viewing money as
+                power, your saving habits, trust in financial dealings, and
+                anxiety related to finances." }}
+            </p>
+        </div>
+
+        <!-- Pie Chart Section -->
+        <section
+            class="mb-12 p-6 bg-yellow-50 rounded-lg shadow-inner chart-section"
+        >
+            {# Added class for easier JS targeting #}
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">
+                Relative Weight of Attitudes
+            </h2>
+            <div class="max-w-md mx-auto">
+                <canvas id="masPieChart"></canvas>
+            </div>
+            {# Jinja check for initial message display - JS will hide it if data
+            is good #} {% if not pie_chart_labels or not pie_chart_data or not
+            all_positive_pie_data %}
+            <p class="text-center text-gray-500 mt-4 chart-message">
+                Attitude distribution chart data is not available or is
+                insufficient to render the chart.
+            </p>
+            {% endif %}
+        </section>
+
+        <!-- Table with Subscale Scores Section -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">
+                Subscale Scores
+            </h2>
+            {% if mas_table_data %}
+            <div class="overflow-x-auto">
+                <table
+                    class="min-w-full bg-white border border-gray-200 rounded-lg shadow"
+                >
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Dimension
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Score (1–5)
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Interpretation
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for item in mas_table_data %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">
+                                    {{ item.dimension | e }}
+                                </div>
+                            </td>
+                            <td
+                                class="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                            >
+                                {{ "%.2f" | format(item.score) if item.score !=
+                                'N/A' and item.score is number else item.score
+                                }}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-600">
+                                {{ item.interpretation | e }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-gray-600 italic">
+                Subscale score details are not available for this report.
+            </p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    console.log('[MAS SCRIPT] Block started. Waiting for Chart.js and DOM ready state.');
+
+    function initializeMasChart() {
+        console.log('[MAS SCRIPT] Attempting initializeMasChart().');
+        const ctxPie = document.getElementById('masPieChart');
+        const chartSection = document.querySelector('.chart-section'); // Target the section
+        let chartMessageEl = chartSection ? chartSection.querySelector('.chart-message') : null;
+
+        if (!ctxPie) {
+            console.error("[MAS SCRIPT] Canvas 'masPieChart' NOT FOUND.");
+            if (chartMessageEl) chartMessageEl.textContent = "Chart canvas element missing from page.";
+            else if (chartSection) {
+                const p = document.createElement('p');
+                p.className = 'text-center text-red-500 mt-4 chart-message-fallback';
+                p.textContent = 'Error: Chart canvas element not found.';
+                chartSection.appendChild(p);
+            }
+            return;
+        }
+        console.log("[MAS SCRIPT] Canvas 'masPieChart' IS FOUND:", ctxPie);
+
+        let pieLabelsFromJinja;
+        let pieDataFromJinja; // These are percentages from main.py
+
+        try {
+            pieLabelsFromJinja = {{ pie_chart_labels | default([]) | json_dumps | safe }};
+            pieDataFromJinja = {{ pie_chart_data | default([]) | json_dumps | safe }};
+            console.log("[MAS SCRIPT] Jinja data parsed - Labels:", JSON.stringify(pieLabelsFromJinja), "Data:", JSON.stringify(pieDataFromJinja));
+        } catch (e) {
+            console.error("[MAS SCRIPT] Error parsing Jinja pie chart data variables:", e);
+            const chartContainer = ctxPie.parentElement;
+            if (chartContainer) {
+                chartContainer.innerHTML = '<p class="text-center text-red-500">Error loading pie chart data (parse error). Check console.</p>';
+            }
+            return;
+        }
+
+        const isValidArray = (arr) => Array.isArray(arr) && arr.length > 0;
+        const hasPositiveData = (arr) => Array.isArray(arr) && arr.some(val => typeof val === 'number' && val > 0);
+
+
+        if (isValidArray(pieLabelsFromJinja) &&
+            isValidArray(pieDataFromJinja) && // Ensure pieDataFromJinja itself is a valid array
+            pieLabelsFromJinja.length === pieDataFromJinja.length &&
+            hasPositiveData(pieDataFromJinja) // Ensure there's some data > 0 to show
+            ) {
+            if(chartMessageEl) chartMessageEl.style.display = 'none'; // Hide message if data is good
+            console.log("[MAS SCRIPT] Pie chart data is valid and has positive values. Creating chart.");
+
+            try {
+                new Chart(ctxPie, {
+                    type: 'pie',
+                    data: {
+                        labels: pieLabelsFromJinja,
+                        datasets: [{
+                            label: 'Relative Weight (%)',
+                            data: pieDataFromJinja, // These are percentages
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.8)',  'rgba(54, 162, 235, 0.8)',
+                                'rgba(255, 205, 86, 0.8)', 'rgba(75, 192, 192, 0.8)',
+                                'rgba(153, 102, 255, 0.8)','rgba(255, 159, 64, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
+                                'rgba(255, 205, 86, 1)', 'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: { padding: 20, font: { size: 13 }}
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.label || '';
+                                        if (label) label += ': ';
+                                        let value = context.parsed;
+                                        if (value !== null && typeof value !== 'undefined') {
+                                            label += value.toFixed(1) + '%';
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                console.log("[MAS SCRIPT] Pie Chart.js instance initialized successfully.");
+            } catch (chartError) {
+                console.error("[MAS SCRIPT] Error initializing Pie Chart.js instance:", chartError);
+                const chartContainer = ctxPie.parentElement;
+                if (chartContainer) {
+                    chartContainer.innerHTML = '<p class="text-center text-red-500">Could not display pie chart (init error). See console for details.</p>';
+                }
+            }
+        } else {
+            console.warn("[MAS SCRIPT] Pie chart data is missing, empty, all zero, or mismatched. Chart will not be rendered.", {
+                labels: pieLabelsFromJinja, data: pieDataFromJinja,
+                labelsValid: isValidArray(pieLabelsFromJinja), dataValid: isValidArray(pieDataFromJinja),
+                lengthsMatch: Array.isArray(pieLabelsFromJinja) && Array.isArray(pieDataFromJinja) ? pieLabelsFromJinja.length === pieDataFromJinja.length : false,
+                hasPositive: hasPositiveData(pieDataFromJinja)
+            });
+
+            if (chartMessageEl) { // If the Jinja-conditional message exists
+                chartMessageEl.textContent = 'Attitude distribution chart data is insufficient to render the chart.';
+                chartMessageEl.style.display = 'block'; // Ensure it's visible
+            } else if (chartSection) { // If it doesn't, create a new one
+                const p = document.createElement('p');
+                p.className = 'text-center text-gray-500 mt-4 chart-message-fallback';
+                p.textContent = 'Attitude distribution data is insufficient to render chart (fallback message).';
+                chartSection.appendChild(p);
+            }
+        }
+    }
+
+    // --- How to call initializeMasChart ---
+    // Try to initialize after a short delay to ensure Chart.js is loaded and DOM is ready,
+    // especially when content might be swapped by HTMX.
+    if (typeof Chart !== 'undefined') {
+        console.log('[MAS SCRIPT] Chart.js library is defined. Initializing chart shortly.');
+        // Using requestAnimationFrame for better timing with DOM updates
+        requestAnimationFrame(() => {
+            setTimeout(initializeMasChart, 50); // Small delay after RAF
+        });
+    } else {
+        console.error('[MAS SCRIPT] Chart.js library is NOT defined. Chart cannot be initialized. Check script loading order and network tab.');
+        const canvasContainer = document.getElementById('masPieChart')?.parentElement;
+        if (canvasContainer) {
+             canvasContainer.innerHTML = '<p class="text-center text-red-500">Error: Charting library (Chart.js) failed to load. Check network console.</p>';
+        }
+    }
+</script>
+{% endblock %}

@@ -136,49 +136,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "q1",
-      "title": "Basic Python Quiz",
-      "description": "Test your fundamental Python knowledge.",
-      "questions": [
-        {
-          "id": "q1_1",
-          "text": "What is the output of print(2**3)?",
-          "type": "multiple-choice",
-          "options": ["5", "6", "8", "9"],
-          "answer": "8"
-        },
-        {
-          "id": "q1_2",
-          "text": "Which keyword is used to define a function in Python?",
-          "type": "multiple-choice",
-          "options": ["func", "def", "function", "define"],
-          "answer": "def"
-        },
-        {
-          "id": "q1_3",
-          "text": "What is the correct file extension for Python files? (e.g. '.py')",
-          "type": "multiple-choice",
-          "options": [".pyth", ".pt", ".pi", ".py"],
-          "answer": ".py"
-        }
-      ]
-    }
-  ],
-  "reports": [
-    {
-      "id": "r1",
-      "user_id": "user1",
-      "quiz_id": "q1",
-      "quiz_title": "Basic Python Quiz",
-      "score": "67%",
-      "date_taken": "2023-10-25",
-      "answers_submitted": {
-        "q1_1": "8",
-        "q1_2": "def",
-        "q1_3": ".pyth"
-      }
     }
   ]
 }

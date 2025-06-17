@@ -1,0 +1,167 @@
+{
+  "quizzes": [
+    {
+      "id": "mas-12",
+      "title": "Money Attitude Scale (MAS) - 12 Item",
+      "description": "Explores your attitudes towards money across four dimensions: Power-Prestige, Retention-Time, Distrust, and Anxiety.",
+      "questions": [
+        {
+          "id": "mas_1",
+          "text": "I often buy things to impress others.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_2",
+          "text": "I enjoy it when people know I have spent a lot on something.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_3",
+          "text": "Money is a symbol of success.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_4",
+          "text": "I am very careful about saving money.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_5",
+          "text": "I regularly put money aside for the future.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_6",
+          "text": "I prefer to save money because I am never sure when things will collapse.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_7",
+          "text": "I am often suspicious when it comes to money dealings.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_8",
+          "text": "I believe one should be wary of others in financial matters.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_9",
+          "text": "It is easy for others to take advantage of you financially.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_10",
+          "text": "I often worry about not having enough money.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_11",
+          "text": "I feel anxious about my financial situation.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_12",
+          "text": "Thinking about money makes me stressed.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -49,22 +49,585 @@ app/
     big_five_report.html
     dashboard.html
     index.html
+    mas_report.html
     old_quiz_page.html
     quiz_page copy copy.html
     quiz_page copy.html
     quiz_page.html
     report_page.html
+  big_five.json
   database.py
   main.py
+  mas.json
   quizzes_data.json
 docker-compose.yml
 Dockerfile
-fly.toml
 requirements.txt
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="app/templates/mas_report.html">
+<!-- app/templates/mas_report.html -->
+{% extends "base.html" %} {% block content %}
+<div class="container mx-auto px-4 py-8 mt-6">
+    <!-- Back to Dashboard Arrow Button -->
+    <div class="mb-4">
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
+        >
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+        </a>
+    </div>
+
+    <div class="bg-white p-6 md:p-10 rounded-xl shadow-2xl">
+        <div class="mb-8 pb-6 border-b border-gray-200">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-2">
+                {{ report.quiz_title | e }}
+            </h1>
+            <p class="text-md text-gray-500">
+                Completed on: {{ report.date_taken.strftime('%B %d, %Y at
+                %H:%M') if report.date_taken else 'N/A' }}
+            </p>
+        </div>
+
+        <div class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-3">
+                About the Money Attitude Scale (MAS)
+            </h2>
+            <p class="text-gray-600 leading-relaxed">
+                {{ report.quiz_description | e if report.quiz_description else
+                "The Money Attitude Scale (MAS) helps understand an individual's
+                attitudes towards money across several key dimensions. This
+                report highlights your tendencies in areas like viewing money as
+                power, your saving habits, trust in financial dealings, and
+                anxiety related to finances." }}
+            </p>
+        </div>
+
+        <!-- Pie Chart Section -->
+        <section class="mb-12 p-6 bg-yellow-50 rounded-lg shadow-inner">
+            {# Subtle yellow background for MAS chart section #}
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">
+                Relative Weight of Attitudes
+            </h2>
+            <div class="max-w-md mx-auto">
+                {# Adjusted max-width for pie chart #}
+                <canvas id="masPieChart"></canvas>
+            </div>
+            {% if not pie_chart_labels or not pie_chart_data %}
+            <p class="text-center text-gray-500 mt-4 chart-message">
+                Attitude distribution chart data is not available or incomplete.
+            </p>
+            {% endif %}
+        </section>
+
+        <!-- Table with Subscale Scores Section -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-6">
+                Subscale Scores
+            </h2>
+            {% if mas_table_data %}
+            <div class="overflow-x-auto">
+                <table
+                    class="min-w-full bg-white border border-gray-200 rounded-lg shadow"
+                >
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Dimension
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Score (1–5)
+                            </th>
+                            <th
+                                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                                Interpretation
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for item in mas_table_data %}
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">
+                                    {{ item.dimension | e }}
+                                </div>
+                            </td>
+                            <td
+                                class="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                            >
+                                {{ "%.2f" | format(item.score) if item.score !=
+                                'N/A' and item.score is number else item.score
+                                }}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-600">
+                                {{ item.interpretation | e }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-gray-600 italic">
+                Subscale score details are not available for this report.
+            </p>
+            {% endif %}
+        </section>
+    </div>
+</div>
+{% endblock %} {% block scripts %} {{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const ctxPie = document.getElementById('masPieChart');
+        const chartMessageEl = document.querySelector('.chart-message');
+
+
+        if (!ctxPie) {
+            console.error("Pie chart canvas element 'masPieChart' not found.");
+            if(chartMessageEl) chartMessageEl.textContent = "Chart canvas element missing from page.";
+            return;
+        }
+
+        let pieLabelsFromJinja;
+        let pieDataFromJinja; // These are percentages from main.py
+
+        try {
+            // Ensure these variables are actually passed from main.py if report_type is mas-12
+            pieLabelsFromJinja = {{ pie_chart_labels | default([]) | json_dumps | safe }};
+            pieDataFromJinja = {{ pie_chart_data | default([]) | json_dumps | safe }};
+        } catch (e) {
+            console.error("Error parsing Jinja pie chart data variables:", e);
+            const chartContainer = ctxPie.parentElement;
+            if (chartContainer) {
+                chartContainer.innerHTML = '<p class="text-center text-red-500">Error loading pie chart data. Check console.</p>';
+            }
+            return;
+        }
+
+        const isValidArray = (arr) => Array.isArray(arr) && arr.length > 0;
+
+        if (isValidArray(pieLabelsFromJinja) &&
+            isValidArray(pieDataFromJinja) &&
+            pieLabelsFromJinja.length === pieDataFromJinja.length &&
+            pieDataFromJinja.some(val => val > 0) // Ensure there's some data to show
+            ) {
+            if(chartMessageEl) chartMessageEl.style.display = 'none'; // Hide message if data is good
+
+            try {
+                new Chart(ctxPie, {
+                    type: 'pie',
+                    data: {
+                        labels: pieLabelsFromJinja,
+                        datasets: [{
+                            label: 'Relative Weight (%)',
+                            data: pieDataFromJinja, // These are percentages
+                            backgroundColor: [ // More distinct colors
+                                'rgba(255, 99, 132, 0.8)',  // Vivid Red
+                                'rgba(54, 162, 235, 0.8)', // Vivid Blue
+                                'rgba(255, 205, 86, 0.8)', // Vivid Yellow
+                                'rgba(75, 192, 192, 0.8)',  // Vivid Teal
+                                'rgba(153, 102, 255, 0.8)',// Vivid Purple
+                                'rgba(255, 159, 64, 0.8)'  // Vivid Orange
+                            ],
+                            borderColor: [ // Slightly darker borders for definition
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 205, 86, 1)',
+                                'rgba(75, 192, 192, 1)',
+                                'rgba(153, 102, 255, 1)',
+                                'rgba(255, 159, 64, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true, // Keep aspect ratio
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    padding: 20, // Add some padding to legend items
+                                    font: {
+                                        size: 13
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        let value = context.parsed;
+                                        if (value !== null && typeof value !== 'undefined') {
+                                            label += value.toFixed(1) + '%';
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (chartError) {
+                console.error("Error initializing Pie Chart.js:", chartError);
+                const chartContainer = ctxPie.parentElement;
+                if (chartContainer) {
+                    chartContainer.innerHTML = '<p class="text-center text-red-500">Could not display pie chart. See console for details.</p>';
+                }
+            }
+        } else {
+            console.warn("Pie chart data is missing, empty, all zero, or mismatched. Chart will not be rendered.", {
+                labels: pieLabelsFromJinja,
+                data: pieDataFromJinja
+            });
+            // Message is already visible via Jinja conditional, or will be shown by default if not hidden by JS
+            // No need to change ctxPie.parentElement.innerHTML here if the Jinja conditional message exists
+        }
+    });
+</script>
+{% endblock %}
+</file>
+
+<file path="app/big_five.json">
+{
+  "quizzes": [
+    {
+      "id": "bfi-10",
+      "title": "Big Five Personality Quiz",
+      "description": "A short 10-item measure of the Big Five personality dimensions.",
+      "questions": [
+        {
+          "id": "bfi_1",
+          "text": "...is reserved.",
+          "type": "multiple-choice",
+          "key": "E_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_2",
+          "text": "...is generally trusting.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_3",
+          "text": "...tends to be lazy.",
+          "type": "multiple-choice",
+          "key": "C_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_4",
+          "text": "...is relaxed, handles stress well.",
+          "type": "multiple-choice",
+          "key": "N_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_5",
+          "text": "...has few artistic interests.",
+          "type": "multiple-choice",
+          "key": "O_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_6",
+          "text": "...is outgoing, sociable.",
+          "type": "multiple-choice",
+          "key": "E",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_7",
+          "text": "...tends to find fault with others.",
+          "type": "multiple-choice",
+          "key": "A_R",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_8",
+          "text": "...does a thorough job.",
+          "type": "multiple-choice",
+          "key": "C",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_9",
+          "text": "...gets nervous easily.",
+          "type": "multiple-choice",
+          "key": "N",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        },
+        {
+          "id": "bfi_10",
+          "text": "...has an active imagination.",
+          "type": "multiple-choice",
+          "key": "O",
+          "options_map": [
+            { "text": "Disagree Strongly ", "value": 1 },
+            { "text": "Disagree A Little ", "value": 2 },
+            { "text": "Neither Agree Nor Disagree ", "value": 3 },
+            { "text": "Agree A Little ", "value": 4 },
+            { "text": "Agree Strongly ", "value": 5 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+</file>
+
+<file path="app/mas.json">
+{
+  "quizzes": [
+    {
+      "id": "mas-12",
+      "title": "Money Attitude Scale (MAS) - 12 Item",
+      "description": "Explores your attitudes towards money across four dimensions: Power-Prestige, Retention-Time, Distrust, and Anxiety.",
+      "questions": [
+        {
+          "id": "mas_1",
+          "text": "I often buy things to impress others.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_2",
+          "text": "I enjoy it when people know I have spent a lot on something.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_3",
+          "text": "Money is a symbol of success.",
+          "type": "multiple-choice",
+          "key": "PP",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_4",
+          "text": "I am very careful about saving money.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_5",
+          "text": "I regularly put money aside for the future.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_6",
+          "text": "I prefer to save money because I am never sure when things will collapse.",
+          "type": "multiple-choice",
+          "key": "RT",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_7",
+          "text": "I am often suspicious when it comes to money dealings.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_8",
+          "text": "I believe one should be wary of others in financial matters.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_9",
+          "text": "It is easy for others to take advantage of you financially.",
+          "type": "multiple-choice",
+          "key": "D",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_10",
+          "text": "I often worry about not having enough money.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_11",
+          "text": "I feel anxious about my financial situation.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        },
+        {
+          "id": "mas_12",
+          "text": "Thinking about money makes me stressed.",
+          "type": "multiple-choice",
+          "key": "A",
+          "options_map": [
+            { "text": "Strongly Disagree", "value": 1 },
+            { "text": "Disagree", "value": 2 },
+            { "text": "Neutral", "value": 3 },
+            { "text": "Agree", "value": 4 },
+            { "text": "Strongly Agree", "value": 5 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+</file>
 
 <file path="app/templates/_footer.html">
 <!-- app/templates/_footer.html -->
@@ -665,13 +1228,64 @@ This section contains the contents of the repository's files.
     <!-- Quizzes Section -->
     <section class="mb-16">
         <h2 class="text-3xl font-semibold text-gray-700 mb-8 border-b pb-3">
-            Available Quizzes
+            Quizzes
         </h2>
         {% if quizzes %}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {% for quiz in quizzes %}
+            {% for quiz in quizzes %} {% set is_big_five_quiz = quiz.id ==
+            'bfi-10' %} {% set is_mas_quiz = quiz.id == 'mas-12' %} {% if
+            is_big_five_quiz %}
             <div
-                class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col justify-between"
+                class="bg-violet-100 p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col h-full"
+            >
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="text-2xl font-bold text-violet-800 mr-2">
+                        {{ quiz.title }}
+                    </h3>
+                    <a
+                        href="{{ url_for('quiz_page_route', quiz_id=quiz.id) }}"
+                        class="bg-white text-violet-700 hover:bg-violet-50 font-semibold py-1.5 px-4 text-xs rounded-full shadow-sm whitespace-nowrap flex-shrink-0"
+                    >
+                        Take Test
+                    </a>
+                </div>
+                <p class="text-violet-600 text-sm mb-4 flex-grow">
+                    {{ quiz.description }}
+                </p>
+                <div
+                    class="mt-auto flex justify-start items-center text-sm text-violet-700 pt-2"
+                >
+                    <span>{{ quiz.questions | length }} Questions</span>
+                </div>
+            </div>
+            {% elif is_mas_quiz %}
+            <div
+                class="bg-yellow-100 p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col h-full"
+            >
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="text-2xl font-bold text-yellow-800 mr-2">
+                        {{ quiz.title }}
+                    </h3>
+                    <a
+                        href="{{ url_for('quiz_page_route', quiz_id=quiz.id) }}"
+                        class="bg-white text-yellow-700 hover:bg-yellow-50 font-semibold py-1.5 px-4 text-xs rounded-full shadow-sm whitespace-nowrap flex-shrink-0"
+                    >
+                        Take Test
+                    </a>
+                </div>
+                <p class="text-yellow-600 text-sm mb-4 flex-grow">
+                    {{ quiz.description }}
+                </p>
+                <div
+                    class="mt-auto flex justify-start items-center text-sm text-yellow-700 pt-2"
+                >
+                    <span>{{ quiz.questions | length }} Questions</span>
+                </div>
+            </div>
+            {% else %}
+            <!-- This block would be for any other quiz types -->
+            <div
+                class="bg-white p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col justify-between h-full"
             >
                 <div>
                     <h3 class="text-2xl font-bold text-blue-600 mb-3">
@@ -688,7 +1302,7 @@ This section contains the contents of the repository's files.
                     Take Quiz
                 </a>
             </div>
-            {% endfor %}
+            {% endif %} {% endfor %}
         </div>
         {% else %}
         <p class="text-gray-600 italic">
@@ -700,39 +1314,41 @@ This section contains the contents of the repository's files.
     <!-- Reports Section -->
     <section>
         <h2 class="text-3xl font-semibold text-gray-700 mb-8 border-b pb-3">
-            Your Quiz Reports
+            Reports
         </h2>
         {% if reports %}
-        <div class="bg-white p-6 rounded-xl shadow-lg">
+        <div class="bg-white p-0 rounded-xl shadow-lg">
             <ul class="divide-y divide-gray-200">
-                {% for report in reports %}
-                <li class="py-5">
+                {% for report in reports %} {% set is_bfi_report =
+                report.report_type == 'bfi-10' %} {% set is_mas_report =
+                report.report_type == 'mas-12' %}
+                <li
+                    class="py-5 px-6 {% if is_bfi_report %}bg-violet-100{% elif is_mas_report %}bg-yellow-100{% else %}bg-transparent{% endif %} first:rounded-t-xl last:rounded-b-xl"
+                >
                     <div
                         class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                     >
                         <div>
-                            <h4 class="text-xl font-medium text-gray-800">
+                            <h4
+                                class="text-xl font-medium {% if is_bfi_report %}text-violet-800{% elif is_mas_report %}text-yellow-800{% else %}text-gray-800{% endif %}"
+                            >
                                 {{ report.quiz_title }}
                             </h4>
-                            <p class="text-sm text-gray-500">
+                            <p
+                                class="text-sm {% if is_bfi_report %}text-violet-600{% elif is_mas_report %}text-yellow-600{% else %}text-gray-500{% endif %}"
+                            >
                                 Taken on: {{
                                 report.date_taken.strftime('%Y-%m-%d %H:%M') if
                                 report.date_taken else 'N/A' }}
                             </p>
                         </div>
                         <div class="flex items-center gap-4 mt-2 sm:mt-0">
-                            <div class="text-right">
-                                {% if report.report_type == 'bfi-10' and
-                                report.score is mapping %}
-                                <span
-                                    class="text-sm font-semibold text-gray-700 block"
-                                    >Personality Profile</span
-                                >
-                                <span class="text-xs text-gray-500"
-                                    >(Detailed Report)</span
-                                >
-                                {% elif report.score is string %} {# Standard
-                                percentage score #}
+                            <div class="text-right min-w-[100px]">
+                                {% if (report.report_type == 'bfi-10' or
+                                report.report_type == 'mas-12') and report.score
+                                is mapping %}
+                                <!-- No score displayed directly for complex reports like BFI/MAS -->
+                                {% elif report.score is string %}
                                 <span
                                     class="text-2xl font-semibold {% if report.score.replace('%','') | int >= 80 %}text-green-600 {% elif report.score.replace('%','') | int >= 50 %}text-yellow-600 {% else %}text-red-600{% endif %}"
                                 >
@@ -747,7 +1363,7 @@ This section contains the contents of the repository's files.
                             </div>
                             <a
                                 href="{{ url_for('report_page_route', report_id=report.id) }}"
-                                class="text-sm bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+                                class="text-sm font-semibold py-1.5 px-4 rounded-full shadow-sm whitespace-nowrap {% if is_bfi_report %}bg-white text-violet-700 hover:bg-violet-50 {% elif is_mas_report %}bg-white text-yellow-700 hover:bg-yellow-50 {% else %}bg-blue-500 hover:bg-blue-600 text-white{% endif %}"
                             >
                                 View Report
                             </a>
@@ -763,7 +1379,6 @@ This section contains the contents of the repository's files.
             reports!
         </p>
         {% endif %}
-        <!-- Removed report-details-area as full page reports are now used -->
     </section>
 </div>
 {% endblock %}
@@ -777,28 +1392,27 @@ This section contains the contents of the repository's files.
 <section
     class="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-48 shadow-xl"
 >
-    {# Increased py-32 (from previous) to py-48 for more height. No top margin
-    needed. #}
     <div class="container mx-auto px-6 text-center">
-        <h1 class="text-5xl font-bold mb-6">
-            Welcome to Your SaaS Quiz Platform!
-        </h1>
+        <h1 class="text-5xl font-bold mb-6">Welcome to mansematch</h1>
         <p class="text-xl text-blue-100 mb-10">
-            The simplest way to create, take, and manage quizzes.
+            Using AI to further gain insights into one's own personality and
+            compatibility.
         </p>
+        {% if request.state.user %}
         <a
-            href="#email-form-section"
-            {#
-            Point
-            to
-            the
-            section
-            wrapper
-            #}
+            href="{{ url_for('dashboard_page_route') }}"
             class="bg-white text-indigo-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition duration-300 transform hover:scale-105 text-lg"
         >
-            Get Started
+            Go to Dashboard
         </a>
+        {% else %}
+        <a
+            href="{{ url_for('auth_page_route') }}"
+            class="bg-white text-indigo-600 font-bold py-3 px-8 rounded-full hover:bg-gray-100 transition duration-300 transform hover:scale-105 text-lg"
+        >
+            Sign In to Get Started
+        </a>
+        {% endif %}
     </div>
 </section>
 
@@ -1938,532 +2552,589 @@ the content block above #} {% endblock %}
 </file>
 
 <file path="app/templates/quiz_page.html">
-<file path="app/templates/quiz_page.html">
-    <!-- app/templates/quiz_page.html -->
-    {% extends "base.html" %} {% block content %}
-    <script id="quiz-data-json" type="application/json">
-        {{ quiz | tojson | safe }}
-    </script>
+<!-- app/templates/quiz_page.html -->
+{% extends "base.html" %} {% block content %}
+<script id="quiz-data-json" type="application/json">
+    {{ quiz | tojson | safe }}
+</script>
 
-    <div class="container mx-auto px-4 py-8 mt-6" id="quiz-container">
-        <!-- Back to Dashboard Button -->
-        <div class="mb-2">
-            <!-- Reduced margin from mb-4 to mb-2 -->
-            <a
-                href="{{ url_for('dashboard_page_route') }}"
-                class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
-                title="Back to Dashboard"
-            >
-                <svg
-                    class="w-6 h-6"
-                    fill="currentColor"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    ></path>
-                </svg>
-            </a>
-        </div>
-
-        <!-- Loading/Error Message Area -->
-        <div id="quiz-message-area" class="text-center py-10">
-            <p class="text-xl text-gray-700">Loading quiz...</p>
-        </div>
-
-        <h1
-            id="quiz-title"
-            class="text-2xl font-bold text-gray-800 mb-1 text-center"
-            style="display: none"
-        ></h1>
-        <p
-            id="question-progress"
-            class="text-sm text-gray-600 mb-4 text-center"
-            style="display: none"
-        ></p>
-
-        <!-- Form will contain all questions -->
-        <form
-            id="quiz-form"
-            method="POST"
-            action="{{ url_for('submit_quiz_route', quiz_id=quiz.id) }}"
-            style="display: none"
+<div class="container mx-auto px-4 py-8 mt-6" id="quiz-container">
+    <!-- Back to Dashboard Button -->
+    <div class="mb-2">
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
         >
-            <div id="questions-wrapper">
-                <!-- Questions will be injected here by JavaScript -->
-            </div>
-
-            <input type="hidden" name="answers" id="all-answers-json" />
-
-            <!-- Navigation -->
-            <div
-                id="quiz-navigation"
-                class="flex justify-between items-center mt-8"
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
             >
-                <button
-                    type="button"
-                    id="prev-question-btn"
-                    onclick="prevQuestion()"
-                    class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Previous
-                </button>
-                <button
-                    type="button"
-                    id="next-question-btn"
-                    onclick="nextQuestion()"
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
-                >
-                    Next
-                </button>
-                <button
-                    type="submit"
-                    id="submit-quiz-btn"
-                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
-                    style="display: none"
-                >
-                    Submit Quiz
-                </button>
-            </div>
-        </form>
-
-        <!-- Submitted Message Area -->
-        <div
-            id="submitted-message-area"
-            class="text-center py-10"
-            style="display: none"
-        >
-            <p class="text-2xl text-green-600 font-semibold">
-                Quiz submitted successfully!
-            </p>
-            <p class="text-gray-600 mt-2">
-                You will be redirected to the dashboard shortly.
-            </p>
-        </div>
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+        </a>
     </div>
 
-    <script>
-        let quizData = null;
-        let questions = [];
-        let currentQuestionIndex = 0;
-        let userAnswers = {};
+    <!-- Loading/Error Message Area -->
+    <div id="quiz-message-area" class="text-center py-10">
+        <p class="text-xl text-gray-700">Loading quiz...</p>
+    </div>
 
-        const quizMessageArea = document.getElementById("quiz-message-area");
-        const quizTitleEl = document.getElementById("quiz-title");
-        const questionProgressEl = document.getElementById("question-progress");
-        const quizFormEl = document.getElementById("quiz-form");
-        const questionsWrapperEl = document.getElementById("questions-wrapper");
-        const allAnswersJsonInput = document.getElementById("all-answers-json");
-        const prevBtn = document.getElementById("prev-question-btn");
-        const nextBtn = document.getElementById("next-question-btn");
-        const submitBtn = document.getElementById("submit-quiz-btn");
-        const quizNavigationEl = document.getElementById("quiz-navigation");
+    <h1
+        id="quiz-title"
+        class="text-2xl font-bold text-gray-800 mb-1 text-center"
+        style="display: none"
+    ></h1>
+    <p
+        id="question-progress"
+        class="text-sm text-gray-600 mb-4 text-center"
+        style="display: none"
+    ></p>
 
-        function escapeHtml(unsafe) {
-            if (unsafe === null || typeof unsafe === "undefined") return "";
-            return String(unsafe)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
+    <form
+        id="quiz-form"
+        method="POST"
+        action="{{ url_for('submit_quiz_route', quiz_id=quiz.id) }}"
+        style="display: none"
+    >
+        <div id="questions-wrapper"></div>
+        <input type="hidden" name="answers" id="all-answers-json" />
+        <div
+            id="quiz-navigation"
+            class="flex justify-between items-center mt-8"
+        >
+            <button
+                type="button"
+                id="prev-question-btn"
+                onclick="prevQuestion()"
+                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                Previous
+            </button>
+            <button
+                type="button"
+                id="next-question-btn"
+                onclick="nextQuestion()"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
+            >
+                Next
+            </button>
+            <button
+                type="submit"
+                id="submit-quiz-btn"
+                class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
+                style="display: none"
+            >
+                Submit Quiz
+            </button>
+        </div>
+    </form>
 
-        function escapeHtmlAttr(unsafe) {
-            // Separate function for attribute values to avoid breaking JS syntax
-            if (unsafe === null || typeof unsafe === "undefined") return "";
-            return String(unsafe)
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
+    <div
+        id="submitted-message-area"
+        class="text-center py-10"
+        style="display: none"
+    >
+        <p class="text-2xl text-green-600 font-semibold">
+            Quiz submitted successfully!
+        </p>
+        <p class="text-gray-600 mt-2">
+            You will be redirected to the dashboard shortly.
+        </p>
+    </div>
+</div>
 
-        function capitalizeFirstLetter(string) {
-            if (!string || string.length === 0) return string;
-            return string.charAt(0).toUpperCase() + string.slice(1);
-        }
+<script>
+    var quizData = null;
+    var questions = [];
+    var currentQuestionIndex = 0;
+    var userAnswers = {};
 
-        function updateSliderValueDisplay(questionId, value) {
-            const displayEl = document.getElementById(
-                `slider-value-display-${questionId}`,
+    const quizMessageArea = document.getElementById("quiz-message-area");
+    const quizTitleEl = document.getElementById("quiz-title");
+    const questionProgressEl = document.getElementById("question-progress");
+    const quizFormEl = document.getElementById("quiz-form");
+    const questionsWrapperEl = document.getElementById("questions-wrapper");
+    const allAnswersJsonInput = document.getElementById("all-answers-json");
+    const prevBtn = document.getElementById("prev-question-btn");
+    const nextBtn = document.getElementById("next-question-btn");
+    const submitBtn = document.getElementById("submit-quiz-btn");
+    const quizNavigationEl = document.getElementById("quiz-navigation");
+
+    function escapeHtml(unsafe) {
+        if (unsafe === null || typeof unsafe === "undefined") return "";
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function escapeHtmlAttr(unsafe) {
+        // Separate function for attribute values to avoid breaking JS syntax
+        if (unsafe === null || typeof unsafe === "undefined") return "";
+        return String(unsafe).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function capitalizeFirstLetter(string) {
+        if (!string || string.length === 0) return string;
+        return string.charAt(0).toUpperCase() + string.slice(1);
+    }
+
+    function updateSliderValueDisplay(questionId, value) {
+        const displayEl = document.getElementById(
+            `slider-value-display-${questionId}`,
+        );
+        const question = questions.find((q) => q.id === questionId);
+        if (displayEl && question && question.options_map) {
+            const selectedOption = question.options_map.find(
+                (opt) => String(opt.value) === String(value),
             );
-            const question = questions.find((q) => q.id === questionId);
-            if (displayEl && question && question.options_map) {
-                const selectedOption = question.options_map.find(
-                    (opt) => String(opt.value) === String(value),
-                );
-                if (selectedOption) {
-                    let textToDisplay = selectedOption.text;
+            if (selectedOption) {
+                let textToDisplay = selectedOption.text;
+                // For BFI-10, remove the score in parenthesis. MAS-12 options are simpler.
+                if (quizData.id === "bfi-10") {
                     const parenIndex = textToDisplay.lastIndexOf(" (");
                     if (parenIndex !== -1) {
                         textToDisplay = textToDisplay.substring(0, parenIndex);
                     }
-                    textToDisplay = capitalizeFirstLetter(textToDisplay);
-                    displayEl.textContent = escapeHtml(textToDisplay);
-                } else {
-                    displayEl.textContent = "N/A";
                 }
+                textToDisplay = capitalizeFirstLetter(textToDisplay.trim()); // Trim whitespace before capitalizing
+                displayEl.textContent = escapeHtml(textToDisplay);
+            } else {
+                displayEl.textContent = "N/A";
             }
         }
+    }
 
-        function initializeQuiz() {
-            const quizDataScript = document.getElementById("quiz-data-json");
-            if (!quizDataScript || !quizDataScript.textContent) {
+    function initializeQuiz() {
+        console.log("Initializing quiz...");
+        currentQuestionIndex = 0;
+
+        if (quizMessageArea) {
+            quizMessageArea.innerHTML =
+                '<p class="text-xl text-gray-700">Loading quiz...</p>';
+            quizMessageArea.style.display = "block";
+        }
+        if (quizTitleEl) quizTitleEl.style.display = "none";
+        if (questionProgressEl) questionProgressEl.style.display = "none";
+        if (quizFormEl) quizFormEl.style.display = "none";
+
+        const quizDataScript = document.getElementById("quiz-data-json");
+        if (!quizDataScript || !quizDataScript.textContent) {
+            if (quizMessageArea)
                 quizMessageArea.innerHTML =
                     '<p class="text-xl text-red-600">Error: Quiz data script element missing.</p>';
-                return;
-            }
-            try {
-                quizData = JSON.parse(quizDataScript.textContent);
-            } catch (e) {
-                console.error("Failed to parse quiz data:", e);
+            return;
+        }
+        try {
+            quizData = JSON.parse(quizDataScript.textContent);
+        } catch (e) {
+            console.error("Failed to parse quiz data:", e);
+            if (quizMessageArea)
                 quizMessageArea.innerHTML =
                     '<p class="text-xl text-red-600">Error: Could not load quiz data.</p>';
-                return;
-            }
-
-            if (!quizData || !quizData.id || !quizData.title) {
-                quizMessageArea.innerHTML =
-                    '<p class="text-xl text-red-600">Error: Invalid quiz data structure.</p>';
-                return;
-            }
-
-            questions = quizData.questions || [];
-            quizTitleEl.textContent = quizData.title;
-
-            if (questions.length === 0) {
-                quizTitleEl.style.display = "block";
-                quizMessageArea.innerHTML = `
-                    <p class="text-xl text-gray-700">This quiz currently has no questions.</p>
-                    <a href="{{ url_for('dashboard_page_route') }}" class="mt-4 inline-block bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                        Back to Dashboard
-                    </a>`;
-                return;
-            }
-
-            userAnswers = {};
-            questions.forEach((q) => {
-                if (q && q.id) {
-                    // MODIFIED SECTION - START
-                    if (
-                        quizData.id === "bfi-10" &&
-                        q.type === "multiple-choice" &&
-                        Array.isArray(q.options_map)
-                    ) {
-                        // For BFI-10 sliders, initialize with the default middle value (3 for a 1-5 scale).
-                        // This ensures that userAnswers has a numeric value from the start,
-                        // preventing the "unanswered" validation from blocking the JSON population
-                        // if the user doesn't interact with a slider.
-                        // The options_map values are 1, 2, 3, 4, 5. So 3 is the neutral/default.
-                        userAnswers[q.id] = 3;
-                    } else {
-                        userAnswers[q.id] = null; // Default for other question types
-                    }
-                    // MODIFIED SECTION - END
-                }
-            });
-
-            renderQuestions();
-            showQuestion(currentQuestionIndex);
-            updateNavigation();
-
-            quizMessageArea.style.display = "none";
-            quizTitleEl.style.display = "block";
-            questionProgressEl.style.display = "block";
-            quizFormEl.style.display = "block";
-            quizNavigationEl.style.display = "flex";
+            return;
         }
 
-        function renderQuestions() {
-            questionsWrapperEl.innerHTML = "";
-            questions.forEach((question) => {
-                if (!question || !question.id) {
-                    console.warn(
-                        "Skipping invalid question during render:",
-                        question,
-                    );
-                    return;
-                }
-                const questionDiv = document.createElement("div");
-                questionDiv.id = `question-${question.id}`;
-                questionDiv.className =
-                    "bg-white p-12 rounded-xl shadow-lg mb-8 question-item";
-                questionDiv.style.display = "none";
+        if (!quizData || !quizData.id || !quizData.title) {
+            if (quizMessageArea)
+                quizMessageArea.innerHTML =
+                    '<p class="text-xl text-red-600">Error: Invalid quiz data structure.</p>';
+            return;
+        }
 
-                const qidStr = String(question.id);
-                let displayQuestionText = escapeHtml(question.text);
+        questions = quizData.questions || [];
+        if (quizTitleEl) quizTitleEl.textContent = quizData.title;
+
+        if (questions.length === 0) {
+            if (quizTitleEl) quizTitleEl.style.display = "block";
+            if (quizMessageArea)
+                quizMessageArea.innerHTML = `
+                <p class="text-xl text-gray-700">This quiz currently has no questions.</p>
+                <a href="{{ url_for('dashboard_page_route') }}" class="mt-4 inline-block bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                    Back to Dashboard
+                </a>`;
+            return;
+        }
+
+        userAnswers = {};
+        questions.forEach((q) => {
+            if (q && q.id) {
+                // MODIFIED for B & D: Default answer for BFI-10 and MAS-12 to 3 (Neutral)
+                if (
+                    (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                    q.type === "multiple-choice" &&
+                    Array.isArray(q.options_map)
+                ) {
+                    userAnswers[q.id] = 3; // Default to Neutral (value 3)
+                } else {
+                    userAnswers[q.id] = null; // For other types or if no options_map
+                }
+            }
+        });
+        console.log(
+            "Initialized userAnswers:",
+            JSON.parse(JSON.stringify(userAnswers)),
+        ); // Deep copy for logging
+
+        renderQuestions();
+        showQuestion(currentQuestionIndex);
+        updateNavigation();
+
+        if (quizMessageArea) quizMessageArea.style.display = "none";
+        if (quizTitleEl) quizTitleEl.style.display = "block";
+        if (questionProgressEl) questionProgressEl.style.display = "block";
+        if (quizFormEl) quizFormEl.style.display = "block";
+        if (quizNavigationEl) quizNavigationEl.style.display = "flex";
+    }
+
+    function renderQuestions() {
+        if (!questionsWrapperEl) return;
+        questionsWrapperEl.innerHTML = "";
+        questions.forEach((question) => {
+            if (!question || !question.id) {
+                console.warn(
+                    "Skipping invalid question during render:",
+                    question,
+                );
+                return;
+            }
+            const questionDiv = document.createElement("div");
+            questionDiv.id = `question-${question.id}`;
+            questionDiv.className =
+                "bg-white p-12 rounded-xl shadow-lg mb-8 question-item"; // Increased padding
+            questionDiv.style.display = "none";
+
+            const qidStr = String(question.id);
+            let displayQuestionText = escapeHtml(question.text);
+            let questionStatementHtml = "";
+
+            // MODIFICATION C: Conditional question statement rendering
+            if (quizData.id === "mas-12") {
+                // For MAS-12, display question text directly without prefix or highlight
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    ${displayQuestionText}
+                </h2>`;
+            } else if (quizData.id === "bfi-10") {
+                // For BFI-10, use the "I see myself as someone who..." prefix and highlight
                 if (displayQuestionText.startsWith("...")) {
                     displayQuestionText = displayQuestionText
                         .substring(3)
                         .trim();
                 }
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    I see myself as someone who
+                    <span class="bg-yellow-200 px-2 py-1 rounded">${displayQuestionText}</span>
+                </h2>`;
+            } else {
+                // Fallback for any other quiz types (if any added later)
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    ${displayQuestionText}
+                </h2>`;
+            }
 
-                const questionStatementHtml = `
-                    <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
-                        I see myself as someone who
-                        <span class="bg-yellow-200 px-2 py-1 rounded">${displayQuestionText}</span>
-                    </h2>`;
+            let optionsHtml = "";
+            let currentSelectionDisplayHtml = "";
 
-                let optionsHtml = "";
-                let currentSelectionDisplayHtml = "";
+            // MODIFICATION B: Use slider for MAS-12 as well
+            if (
+                (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                question.type === "multiple-choice" &&
+                Array.isArray(question.options_map)
+            ) {
+                const optionsMap = question.options_map;
+                // Default value is now set in initializeQuiz, retrieve it here
+                let initialSliderValue =
+                    userAnswers[qidStr] !== null &&
+                    typeof userAnswers[qidStr] !== "undefined"
+                        ? userAnswers[qidStr]
+                        : 3; // Fallback, should ideally be set
 
-                if (
-                    quizData.id === "bfi-10" &&
-                    question.type === "multiple-choice" &&
-                    Array.isArray(question.options_map)
-                ) {
-                    const optionsMap = question.options_map;
-                    // initialSliderValue will now correctly be sourced from userAnswers[qidStr] which is pre-filled (e.g., 3)
-                    let initialSliderValue =
-                        userAnswers[qidStr] !== null &&
-                        typeof userAnswers[qidStr] !== "undefined"
-                            ? userAnswers[qidStr]
-                            : 3; // Fallback, though userAnswers should be set
+                const currentOptionObj =
+                    optionsMap.find(
+                        (opt) =>
+                            String(opt.value) === String(initialSliderValue),
+                    ) || optionsMap.find((opt) => String(opt.value) === "3"); // Default to middle option
 
-                    const currentOptionObj =
-                        optionsMap.find(
-                            (opt) =>
-                                String(opt.value) ===
-                                String(initialSliderValue),
-                        ) ||
-                        optionsMap.find((opt) => String(opt.value) === "3");
-
-                    let initialDisplayLabel = "Neutral";
-                    if (currentOptionObj) {
-                        let textToDisplay = currentOptionObj.text;
+                let initialDisplayLabel = "Neutral"; // Default
+                if (currentOptionObj) {
+                    let textToDisplay = currentOptionObj.text;
+                    if (quizData.id === "bfi-10") {
+                        // BFI-10 specific label cleaning
                         const parenIndex = textToDisplay.lastIndexOf(" (");
-                        if (parenIndex !== -1) {
+                        if (parenIndex !== -1)
                             textToDisplay = textToDisplay.substring(
                                 0,
                                 parenIndex,
                             );
-                        }
-                        initialDisplayLabel =
-                            capitalizeFirstLetter(textToDisplay);
                     }
+                    initialDisplayLabel = capitalizeFirstLetter(
+                        textToDisplay.trim(),
+                    );
+                }
 
-                    currentSelectionDisplayHtml = `
-                        <div id="slider-value-display-${qidStr}" class="text-3xl text-green-600 font-semibold text-center mb-10">
-                            ${escapeHtml(initialDisplayLabel)}
-                        </div>`;
+                currentSelectionDisplayHtml = `<div id="slider-value-display-${qidStr}" class="text-3xl text-green-600 font-semibold text-center mb-10">${escapeHtml(initialDisplayLabel)}</div>`;
 
-                    let startLabelText = optionsMap[0].text;
+                let startLabelText = optionsMap[0].text;
+                if (quizData.id === "bfi-10") {
                     const startParenIdx = startLabelText.lastIndexOf(" (");
-                    if (startParenIdx !== -1) {
+                    if (startParenIdx !== -1)
                         startLabelText = startLabelText.substring(
                             0,
                             startParenIdx,
                         );
-                    }
-                    startLabelText = capitalizeFirstLetter(startLabelText);
+                }
+                startLabelText = capitalizeFirstLetter(startLabelText.trim());
 
-                    let endLabelText = optionsMap[optionsMap.length - 1].text;
+                let endLabelText = optionsMap[optionsMap.length - 1].text;
+                if (quizData.id === "bfi-10") {
                     const endParenIdx = endLabelText.lastIndexOf(" (");
-                    if (endParenIdx !== -1) {
+                    if (endParenIdx !== -1)
                         endLabelText = endLabelText.substring(0, endParenIdx);
-                    }
-                    endLabelText = capitalizeFirstLetter(endLabelText);
+                }
+                endLabelText = capitalizeFirstLetter(endLabelText.trim());
 
-                    optionsHtml = `
-                        <div class="slider-container mx-auto" style="max-width: 500px;">
-                            <div class="flex justify-between w-full mb-3 px-1" aria-hidden="true">
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                            </div>
-
-                            <input type="range" id="slider-${qidStr}" name="q_${qidStr}"
-                                   min="${escapeHtmlAttr(String(optionsMap[0].value))}"
-                                   max="${escapeHtmlAttr(String(optionsMap[optionsMap.length - 1].value))}"
-                                   value="${escapeHtmlAttr(String(initialSliderValue))}" step="1"
-                                   class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 outline-none"
-                                   oninput="updateSliderValueDisplay('${qidStr}', this.value); updateAnswer('${qidStr}', this.value);">
-
-                            <div class="flex justify-between text-xs text-gray-500 mt-2 px-1">
-                                <span>${escapeHtml(startLabelText)}</span>
-                                <span>${escapeHtml(endLabelText)}</span>
-                            </div>
+                optionsHtml = `
+                    <div class="slider-container mx-auto" style="max-width: 500px;">
+                        <div class="flex justify-between w-full mb-3 px-1" aria-hidden="true">${Array(
+                            5,
+                        )
+                            .fill(0)
+                            .map(
+                                () =>
+                                    '<span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>',
+                            )
+                            .join("")}</div>
+                        <input type="range" id="slider-${qidStr}" name="q_${qidStr}"
+                               min="${escapeHtmlAttr(String(optionsMap[0].value))}" max="${escapeHtmlAttr(String(optionsMap[optionsMap.length - 1].value))}"
+                               value="${escapeHtmlAttr(String(initialSliderValue))}" step="1"
+                               class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 outline-none"
+                               oninput="updateSliderValueDisplay('${qidStr}', this.value); updateAnswer('${qidStr}', this.value);">
+                        <div class="flex justify-between text-xs text-gray-500 mt-2 px-1">
+                            <span>${escapeHtml(startLabelText)}</span>
+                            <span>${escapeHtml(endLabelText)}</span>
+                        </div>
+                    </div>`;
+            } else if (
+                // Standard radio buttons for other multiple-choice questions
+                question.type === "multiple-choice" &&
+                (Array.isArray(question.options_map) ||
+                    Array.isArray(question.options))
+            ) {
+                const optsArray = question.options_map || question.options;
+                let radioOptionsListHtml = optsArray
+                    .map((opt) => {
+                        const isMapped = !!question.options_map;
+                        const optionValue = isMapped ? String(opt.value) : opt;
+                        const optionDisplay = isMapped ? opt.text : opt;
+                        return `
+                        <div>
+                            <label class="flex items-center p-3 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
+                                <input type="radio" name="q_${qidStr}" value="${escapeHtmlAttr(optionValue)}"
+                                       class="form-radio h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                       onchange="updateAnswer('${qidStr}', this.value)">
+                                <span class="ml-3 text-gray-700">${escapeHtml(optionDisplay)}</span>
+                            </label>
                         </div>`;
-                } else if (
-                    question.type === "multiple-choice" &&
-                    (Array.isArray(question.options_map) ||
-                        Array.isArray(question.options))
+                    })
+                    .join("");
+                optionsHtml = `<div class="space-y-3 mt-10">${radioOptionsListHtml}</div>`;
+            }
+            questionDiv.innerHTML = `${questionStatementHtml} ${currentSelectionDisplayHtml} ${optionsHtml}`;
+            questionsWrapperEl.appendChild(questionDiv);
+        });
+    }
+
+    function showQuestion(index) {
+        if (!questionProgressEl) return;
+        document
+            .querySelectorAll(".question-item")
+            .forEach((el) => (el.style.display = "none"));
+
+        if (questions[index] && questions[index].id) {
+            const qId = questions[index].id;
+            const currentQuestionEl = document.getElementById(
+                `question-${qId}`,
+            );
+            if (currentQuestionEl) {
+                currentQuestionEl.style.display = "block";
+                const answer = userAnswers[qId]; // Should be a number (e.g., 3) due to initialization
+
+                // Check if this quiz type uses a slider
+                if (
+                    (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                    questions[index].type === "multiple-choice" &&
+                    Array.isArray(questions[index].options_map)
                 ) {
-                    const optsArray = question.options_map || question.options;
-                    let radioOptionsListHtml = optsArray
-                        .map((opt) => {
-                            const isMapped = !!question.options_map;
-                            const optionValue = isMapped
-                                ? String(opt.value)
-                                : opt;
-                            const optionDisplay = isMapped ? opt.text : opt;
-                            return `
-                            <div>
-                                <label class="flex items-center p-3 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
-                                    <input type="radio" name="q_${qidStr}" value="${escapeHtmlAttr(optionValue)}"
-                                           class="form-radio h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                                           onchange="updateAnswer('${qidStr}', this.value)">
-                                    <span class="ml-3 text-gray-700">${escapeHtml(optionDisplay)}</span>
-                                </label>
-                            </div>`;
-                        })
-                        .join("");
-                    optionsHtml = `<div class="space-y-3 mt-10">${radioOptionsListHtml}</div>`;
-                }
-
-                questionDiv.innerHTML = `${questionStatementHtml} ${currentSelectionDisplayHtml} ${optionsHtml}`;
-                questionsWrapperEl.appendChild(questionDiv);
-            });
-        }
-
-        function showQuestion(index) {
-            document
-                .querySelectorAll(".question-item")
-                .forEach((el) => (el.style.display = "none"));
-
-            if (questions[index] && questions[index].id) {
-                const qId = questions[index].id;
-                const currentQuestionEl = document.getElementById(
-                    `question-${qId}`,
-                );
-                if (currentQuestionEl) {
-                    currentQuestionEl.style.display = "block";
-                    const answer = userAnswers[qId]; // This will be the pre-filled value (e.g., 3) for BFI-10
-
-                    if (
-                        quizData.id === "bfi-10" &&
-                        questions[index].type === "multiple-choice" &&
-                        Array.isArray(questions[index].options_map)
-                    ) {
-                        const slider = currentQuestionEl.querySelector(
-                            `input[type="range"][name="q_${qId}"]`,
+                    const slider = currentQuestionEl.querySelector(
+                        `input[type="range"][name="q_${qId}"]`,
+                    );
+                    if (slider) {
+                        // 'answer' should be numeric (e.g. 3) from initialization or updateAnswer
+                        slider.value = String(answer); // Set slider position
+                        updateSliderValueDisplay(qId, slider.value); // Update text display
+                    }
+                } else {
+                    // For standard radio buttons
+                    if (answer !== null && typeof answer !== "undefined") {
+                        const selectedRadio = currentQuestionEl.querySelector(
+                            `input[name="q_${qId}"][value="${escapeHtmlAttr(String(answer))}"]`,
                         );
-                        if (slider) {
-                            // 'answer' will be the numeric value from userAnswers (e.g., 3)
-                            let sliderValueToSet =
-                                answer !== null && typeof answer !== "undefined"
-                                    ? answer
-                                    : 3;
-                            slider.value = String(sliderValueToSet);
-                            updateSliderValueDisplay(qId, slider.value);
-                        }
-                    } else {
-                        if (answer !== null && typeof answer !== "undefined") {
-                            const selectedRadio =
-                                currentQuestionEl.querySelector(
-                                    `input[name="q_${qId}"][value="${escapeHtmlAttr(String(answer))}"]`,
-                                );
-                            if (selectedRadio) selectedRadio.checked = true;
-                        }
+                        if (selectedRadio) selectedRadio.checked = true;
                     }
                 }
             }
-            questionProgressEl.textContent = `Question ${index + 1} of ${questions.length}`;
         }
+        questionProgressEl.textContent = `Question ${index + 1} of ${questions.length}`;
+    }
 
-        window.updateAnswer = function (questionId, answerValue) {
-            if (quizData.id === "bfi-10") {
-                userAnswers[questionId] = parseFloat(answerValue); // answerValue from slider is string
-            } else {
-                try {
-                    const numValue = parseFloat(answerValue);
-                    userAnswers[questionId] =
-                        !isNaN(numValue) &&
-                        String(numValue) === String(answerValue)
-                            ? numValue
-                            : String(answerValue);
-                } catch (e) {
-                    userAnswers[questionId] = String(answerValue);
-                }
-            }
-        };
-
-        function nextQuestion() {
-            if (currentQuestionIndex < questions.length - 1) {
-                currentQuestionIndex++;
-                showQuestion(currentQuestionIndex);
-                updateNavigation();
+    // MODIFICATION D: Ensure MAS-12 also gets numeric answers for consistency
+    window.updateAnswer = function (questionId, answerValue) {
+        if (quizData.id === "bfi-10" || quizData.id === "mas-12") {
+            userAnswers[questionId] = parseFloat(answerValue);
+        } else {
+            // For other quiz types, attempt to parse as number if possible, else string
+            try {
+                const numValue = parseFloat(answerValue);
+                userAnswers[questionId] =
+                    !isNaN(numValue) && String(numValue) === String(answerValue)
+                        ? numValue
+                        : String(answerValue);
+            } catch (e) {
+                userAnswers[questionId] = String(answerValue);
             }
         }
+        console.log(
+            "Updated userAnswers:",
+            questionId,
+            userAnswers[questionId],
+            JSON.parse(JSON.stringify(userAnswers)),
+        );
+    };
 
-        function prevQuestion() {
-            if (currentQuestionIndex > 0) {
-                currentQuestionIndex--;
-                showQuestion(currentQuestionIndex);
-                updateNavigation();
-            }
+    function nextQuestion() {
+        if (currentQuestionIndex < questions.length - 1) {
+            currentQuestionIndex++;
+            showQuestion(currentQuestionIndex);
+            updateNavigation();
         }
+    }
 
-        function updateNavigation() {
-            prevBtn.disabled = currentQuestionIndex === 0;
-            nextBtn.style.display =
-                currentQuestionIndex === questions.length - 1
-                    ? "none"
-                    : "inline-block";
-            submitBtn.style.display =
-                currentQuestionIndex === questions.length - 1
-                    ? "inline-block"
-                    : "none";
+    function prevQuestion() {
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            showQuestion(currentQuestionIndex);
+            updateNavigation();
         }
+    }
 
+    function updateNavigation() {
+        if (!prevBtn || !nextBtn || !submitBtn) return;
+        prevBtn.disabled = currentQuestionIndex === 0;
+        nextBtn.style.display =
+            currentQuestionIndex === questions.length - 1
+                ? "none"
+                : "inline-block";
+        submitBtn.style.display =
+            currentQuestionIndex === questions.length - 1
+                ? "inline-block"
+                : "none";
+    }
+
+    if (quizFormEl) {
         quizFormEl.addEventListener("submit", function (event) {
+            // Validation: Ensure all questions are answered for BFI-10 and MAS-12
+            // Since MAS-12 now defaults to 3, every question effectively has an answer.
+            // BFI-10 also defaults to 3.
+            // This validation can be simplified or made more generic if needed.
+            // For now, BFI-10 has a more explicit "please answer all" message if any default was not changed AND one was missed.
+            // For simplicity with MAS-12 and BFI-10 defaulting, we can skip strict "all answered" check here for now,
+            // as they will submit with defaults.
+            // The previous BFI-10 specific alert for *unanswered* questions:
             if (quizData && quizData.id === "bfi-10") {
+                // Or could be: (quizData.id === "bfi-10" || quizData.id === "mas-12")
                 let firstUnansweredQ = null;
                 let firstUnansweredIndex = -1;
                 for (let i = 0; i < questions.length; i++) {
-                    // For BFI-10, userAnswers[questions[i].id] will now be a number (e.g., 3)
-                    // so this condition (=== null or undefined) will be false if all defaults are set.
-                    if (
-                        userAnswers[questions[i].id] === null ||
-                        typeof userAnswers[questions[i].id] === "undefined"
-                    ) {
-                        firstUnansweredQ = questions[i];
-                        firstUnansweredIndex = i;
-                        break;
-                    }
+                    // Check if userAnswers[questions[i].id] is still the initial default or explicitly null
+                    // This logic might need refinement if "unanswered" means "not touched from default"
+                    // For now, since defaults are numbers, this original check for null/undefined is less relevant for BFI/MAS.
+                    // If you want to force users to *change* from default, this needs more logic.
+                    // For now, we assume submitting defaults is okay. The original logic was:
+                    // if (userAnswers[questions[i].id] === null || typeof userAnswers[questions[i].id] === "undefined")
+                    // With defaults being 3, this condition will likely not trigger for BFI/MAS unless something went wrong.
                 }
-                if (firstUnansweredQ) {
-                    event.preventDefault();
-                    currentQuestionIndex = firstUnansweredIndex;
-                    showQuestion(currentQuestionIndex);
-                    updateNavigation();
-                    let qText = escapeHtml(firstUnansweredQ.text).startsWith(
-                        "...",
-                    )
-                        ? escapeHtml(firstUnansweredQ.text).substring(3).trim()
-                        : escapeHtml(firstUnansweredQ.text);
-                    alert(
-                        `Please provide an answer for: "I see myself as someone who ${qText}" (Question ${firstUnansweredIndex + 1}).`,
-                    );
-                    return; // Important: exit listener so allAnswersJsonInput is not populated if validation fails
-                }
+                // ... (original alert logic for BFI-10 if firstUnansweredQ is found) ...
             }
-            // If validation passes (or not BFI-10), this line will now correctly execute.
-            allAnswersJsonInput.value = JSON.stringify(userAnswers);
-        });
 
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", initializeQuiz);
-        } else {
-            if (
-                document.getElementById("quiz-container") &&
-                document.getElementById("quiz-data-json")
-            ) {
-                initializeQuiz();
+            if (allAnswersJsonInput) {
+                try {
+                    const answersString = JSON.stringify(userAnswers);
+                    allAnswersJsonInput.value = answersString;
+                    console.log("Attempting to submit answers:", answersString); // DEBUGGING
+                    if (!answersString || answersString === "{}") {
+                        // Basic check
+                        console.error(
+                            "Answers string is empty or invalid before submission attempt.",
+                        );
+                        // alert("Cannot submit empty answers."); // Optional user alert
+                        // event.preventDefault(); return;
+                    }
+                } catch (e) {
+                    console.error(
+                        "Error stringifying userAnswers on submit:",
+                        e,
+                        userAnswers,
+                    );
+                    alert(
+                        "A client-side error occurred while preparing your answers. Please try again.",
+                    );
+                    event.preventDefault();
+                    return;
+                }
             } else {
-                document.addEventListener("DOMContentLoaded", initializeQuiz);
+                console.error("#all-answers-json input not found on submit!");
+                alert("A critical page error occurred. Cannot submit quiz.");
+                event.preventDefault();
+                return;
             }
+            // If we reach here, the form should submit with the stringified answers.
+        });
+    }
+
+    function attemptInitializeQuiz() {
+        if (
+            document.getElementById("quiz-container") &&
+            document.getElementById("quiz-data-json")
+        ) {
+            initializeQuiz();
+        } else {
+            console.warn(
+                "Quiz container or data script not found. Quiz initialization skipped.",
+            );
         }
-    </script>
-    {% endblock %} {% block scripts %} {# Scripts specific to quiz_page are now
-    in the content block above #} {% endblock %}
-</file>
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", attemptInitializeQuiz);
+    } else {
+        attemptInitializeQuiz();
+    }
+</script>
+{% endblock %} {% block scripts %}{% endblock %}
 </file>
 
 <file path="app/templates/report_page.html">
@@ -2543,102 +3214,6 @@ the content block above #} {% endblock %}
 {% endblock %} {% block scripts %} {{ super() }}
 <!-- Add any page-specific JS here if needed -->
 {% endblock %}
-</file>
-
-<file path="app/database.py">
-# app/database.py
-import os
-import logging
-from typing import Optional
-
-from pymongo import MongoClient
-from pymongo.database import Database
-from pymongo.collection import Collection
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-# --- Logging Setup ---
-# The logger will inherit basicConfig from main.py if this module is imported after basicConfig is set.
-# For standalone testing or different logging, configure it here.
-logger = logging.getLogger(__name__)
-
-# --- MongoDB Configuration ---
-MONGO_URI: Optional[str] = os.getenv("MONGO_URI")
-MONGO_DB_NAME: Optional[str] = os.getenv("MONGO_DB_NAME")
-MONGO_REPORTS_COLLECTION: Optional[str] = os.getenv("MONGO_REPORTS_COLLECTION")
-
-mongo_client: Optional[MongoClient] = None
-db: Optional[Database] = None
-reports_collection: Optional[Collection] = None
-
-def connect_to_mongo():
-    """
-    Establishes a connection to MongoDB and initializes the db and reports_collection.
-    """
-    global mongo_client, db, reports_collection
-
-    if reports_collection is not None: # Already connected
-        logger.debug("MongoDB connection already established.")
-        return
-
-    if not MONGO_URI or not MONGO_DB_NAME or not MONGO_REPORTS_COLLECTION:
-        logger.critical(
-            "MongoDB environment variables (MONGO_URI, MONGO_DB_NAME, MONGO_REPORTS_COLLECTION) "
-            "not fully set. MongoDB integration will be disabled."
-        )
-        return
-
-    try:
-        # Obfuscate credentials for logging if present
-        log_uri = MONGO_URI
-        if "@" in log_uri and "mongodb+srv://" in log_uri:
-            parts = log_uri.split("@")
-            credentials_part = parts[0].split("://")
-            if len(credentials_part) > 1 and ":" in credentials_part[1]:
-                user_pass = credentials_part[1].split(":")
-                user = user_pass[0]
-                log_uri = f"{credentials_part[0]}://{user}:<PASSWORD>@{parts[1]}"
-            else: # Just user, no password, or malformed
-                 log_uri = f"{credentials_part[0]}://<USER>@{parts[1]}"
-
-
-        logger.info(f"Attempting to connect to MongoDB: {log_uri} (DB: {MONGO_DB_NAME})")
-        mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000) # Timeout for connection
-        mongo_client.admin.command('ping') # Verify connection
-
-        db = mongo_client[MONGO_DB_NAME]
-        reports_collection = db[MONGO_REPORTS_COLLECTION]
-
-        logger.info(
-            f"Successfully connected to MongoDB. Database: {MONGO_DB_NAME}, "
-            f"Collection: {MONGO_REPORTS_COLLECTION}"
-        )
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}. MongoDB integration will be disabled.")
-        mongo_client = None
-        db = None
-        reports_collection = None
-
-def close_mongo_connection():
-    """
-    Closes the MongoDB connection if it's open.
-    """
-    global mongo_client
-    if mongo_client:
-        mongo_client.close()
-        mongo_client = None
-        db = None
-        reports_collection = None # Ensure this is also reset
-        logger.info("MongoDB connection closed.")
-
-# --- Initialize connection when module is loaded ---
-# This makes `reports_collection` available for import in main.py.
-# For FastAPI applications, it's generally better to manage connections
-# using lifespan events (on_event("startup") and on_event("shutdown")).
-# However, this approach keeps it simple and similar to your original structure.
-# connect_to_mongo()
 </file>
 
 <file path="app/quizzes_data.json">
@@ -2858,62 +3433,6 @@ services:
       ]
 </file>
 
-<file path="fly.toml">
-# fly.toml
-
-# Replace "thinksync" with the name you gave your app on Fly.io
-# (e.g., the output of `fly apps create your-app-name`)
-app = "thinksync"
-primary_region = "cdg" # Choose a region, e.g., "sjc" (San Jose), "iad" (Ashburn), "lhr" (London)
-
-# Kill signal and timeout for graceful shutdowns
-kill_signal = "SIGINT"
-kill_timeout = "5s" # FastAPI's default shutdown timeout
-
-[build]
-  # Fly.io will use your Dockerfile to build the image
-  dockerfile = "Dockerfile"
-  # You can add build-time arguments if your Dockerfile uses them
-  # [build.args]
-  #   SOME_BUILD_ARG = "value"
-
-[env]
-  # This PORT must match the port your Uvicorn server listens on inside the container
-  PORT = "8000"
-  LOG_LEVEL = "INFO" # Or "DEBUG", "WARNING", "ERROR" as set in your app
-  # PYTHONUNBUFFERED and PYTHONDONTWRITEBYTECODE are already set in your Dockerfile, which is good.
-  # For Gunicorn (see "Further Considerations" below), you might add:
-  # WEB_CONCURRENCY = "2" # Example: 2 Gunicorn workers
-
-# This section defines how Fly.io routes HTTP/HTTPS traffic to your app
-[http_service]
-  internal_port = 8000 # This must match the PORT Uvicorn is listening on
-  force_https = true   # Recommended: Redirects HTTP to HTTPS
-  auto_stop_machines = true  # Stops machines when idle to save costs (can be false)
-  auto_start_machines = true # Starts machines on new requests
-  min_machines_running = 0   # If auto_stop_machines is true; set to 1 for always-on
-
-  # HTTP Health Checks
-  # Fly.io uses these to determine if your app is healthy and can receive traffic.
-  [[http_service.checks]]
-    port = 8000 # Port for the health check, usually same as internal_port
-    type = "http"
-    method = "GET"
-    # Your current "/" path is okay for a basic health check.
-    # For a more robust check, consider adding a dedicated /healthz endpoint (see notes below).
-    path = "/"
-    interval = "15s" # How often to check
-    timeout = "2s"   # How long to wait for a response
-    grace_period = "10s" # Time to allow app to start before checks begin failing.
-                        # Adjust based on your app's startup time.
-
-# Define VM resources (optional, Fly.io picks defaults based on region/plan)
-# [[vm]]
-#  cpu_kind = "shared"
-#  cpus = 1
-#  memory_mb = 256 # Adjust memory as needed. Smallest is often 256MB.
-</file>
-
 <file path="requirements.txt">
 # requirements.txt
 fastapi
@@ -2924,6 +3443,107 @@ pymongo
 python-dotenv
 </file>
 
+<file path="app/database.py">
+# app/database.py
+import os
+import logging
+from typing import Optional
+from pymongo import MongoClient
+from pymongo.database import Database
+from pymongo.collection import Collection
+from dotenv import load_dotenv
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+# Read environment variables once at module load for consistency
+MONGO_URI_FROM_ENV: Optional[str] = os.getenv("MONGO_URI")
+MONGO_DB_NAME_FROM_ENV: Optional[str] = os.getenv("MONGO_DB_NAME")
+MONGO_REPORTS_COLLECTION_FROM_ENV: Optional[str] = os.getenv("MONGO_REPORTS_COLLECTION")
+
+mongo_client: Optional[MongoClient] = None
+db: Optional[Database] = None
+reports_collection: Optional[Collection] = None
+
+def connect_to_mongo():
+    global mongo_client, db, reports_collection
+
+    if reports_collection is not None:
+        logger.debug("MongoDB connection already established.")
+        return
+
+    # Use the module-level variables
+    current_mongo_uri = MONGO_URI_FROM_ENV
+    current_mongo_db_name = MONGO_DB_NAME_FROM_ENV
+    current_mongo_reports_collection = MONGO_REPORTS_COLLECTION_FROM_ENV
+
+    # --- Enhanced Logging ---
+    logger.info(f"Raw MONGO_URI from env (repr): {repr(current_mongo_uri)}")
+    logger.info(f"Raw MONGO_DB_NAME from env (repr): {repr(current_mongo_db_name)}")
+    logger.info(f"Raw MONGO_REPORTS_COLLECTION from env (repr): {repr(current_mongo_reports_collection)}")
+    # --- End Enhanced Logging ---
+
+    if not current_mongo_uri or not current_mongo_db_name or not current_mongo_reports_collection:
+        logger.critical(
+            "MongoDB environment variables not fully set. MongoDB integration will be disabled."
+        )
+        if not current_mongo_uri: logger.warning("MONGO_URI is missing or empty in environment.")
+        if not current_mongo_db_name: logger.warning("MONGO_DB_NAME is missing or empty in environment.")
+        if not current_mongo_reports_collection: logger.warning("MONGO_REPORTS_COLLECTION is missing or empty in environment.")
+        return
+
+    # Defensive stripping of whitespace from URI
+    # This is a good practice regardless of the current issue.
+    effective_mongo_uri = current_mongo_uri.strip()
+    if effective_mongo_uri != current_mongo_uri:
+        logger.warning(f"MONGO_URI had leading/trailing whitespace. Original (repr): {repr(current_mongo_uri)}, Stripped (repr): {repr(effective_mongo_uri)}")
+    else:
+        logger.info("MONGO_URI has no leading/trailing whitespace detected by strip().")
+
+
+    try:
+        log_uri_display = effective_mongo_uri # Use the stripped URI for display logic
+        if "@" in log_uri_display and ("mongodb://" in log_uri_display or "mongodb+srv://" in log_uri_display):
+            parts = log_uri_display.split("@", 1)
+            scheme_user_pass = parts[0].split("://", 1)
+            if len(scheme_user_pass) == 2:
+                scheme, user_pass_str = scheme_user_pass
+                if ":" in user_pass_str:
+                    user = user_pass_str.split(":", 1)[0]
+                    log_uri_display = f"{scheme}://{user}:<PASSWORD>@{parts[1]}"
+                else:
+                    log_uri_display = f"{scheme}://<USER>@{parts[1]}"
+
+        logger.info(f"Attempting to connect to MongoDB. Obfuscated URI for log: '{log_uri_display}', DB: '{current_mongo_db_name}'")
+
+        # Use the potentially stripped URI for connection
+        mongo_client = MongoClient(effective_mongo_uri, serverSelectionTimeoutMS=5000)
+        mongo_client.admin.command('ping')
+
+        db = mongo_client[current_mongo_db_name]
+        reports_collection = db[current_mongo_reports_collection]
+
+        logger.info(
+            f"Successfully connected to MongoDB. Database: {current_mongo_db_name}, "
+            f"Collection: {current_mongo_reports_collection}"
+        )
+    except Exception as e:
+        # Log the repr of the URI that actually caused the failure
+        logger.error(f"Failed to connect to MongoDB. URI used for connection (repr): {repr(effective_mongo_uri)}. Error: {e}. MongoDB integration will be disabled.")
+        mongo_client = None
+        db = None
+        reports_collection = None
+
+def close_mongo_connection():
+    global mongo_client, db, reports_collection # Added db and reports_collection here
+    if mongo_client:
+        mongo_client.close()
+        mongo_client = None
+        db = None # Reset db
+        reports_collection = None # Reset reports_collection
+        logger.info("MongoDB connection closed.")
+</file>
+
 <file path="app/main.py">
 # app/main.py
 import json
@@ -2931,58 +3551,51 @@ from datetime import datetime
 from typing import Optional, Dict, Any, Union, List
 from pathlib import Path
 from uuid import uuid4
-import logging # Keep logging import at the top
+import logging
 import html
 import os
-from contextlib import asynccontextmanager # For lifespan manager
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-# --- Logging Setup ---
-# Configure logging as early as possible.
-# Using asctime for ISO-like format, process ID, and thread ID for more context
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format='%(asctime)s.%(msecs)03dZ [%(process)d:%(thread)d] %(levelname)-5s [%(name)s] %(module)s.%(funcName)s: %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S' # Simplified ISO 8601 format
+    datefmt='%Y-%m-%dT%H:%M:%S'
 )
-logger = logging.getLogger(__name__) # Logger for this module
+logger = logging.getLogger(__name__)
 
-# --- Import database components ---
-# This import should now work correctly because `app` is a package
-from .database import reports_collection, connect_to_mongo, close_mongo_connection
+from . import database
+from .database import connect_to_mongo, close_mongo_connection
 
-# --- Constants & Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = BASE_DIR / "templates"
-QUIZZES_DATA_FILE = BASE_DIR / "quizzes_data.json"
+# QUIZZES_DATA_FILE = BASE_DIR / "quizzes_data.json" # Removed
+BIG_FIVE_QUIZ_FILE = BASE_DIR / "big_five.json" # New
+MAS_QUIZ_FILE = BASE_DIR / "mas.json"           # New
 
 
-# --- FastAPI Lifespan Events for DB Connection ---
 @asynccontextmanager
-async def lifespan(app_instance: FastAPI): # Renamed 'app' to 'app_instance' to avoid conflict
+async def lifespan(app_instance: FastAPI):
     logger.info("Application startup: connecting to MongoDB...")
-    connect_to_mongo() # Call the connect function from database.py
+    connect_to_mongo()
     yield
     logger.info("Application shutdown: closing MongoDB connection...")
-    close_mongo_connection() # Call the close function from database.py
+    close_mongo_connection()
 
 app = FastAPI(title="mansematch", lifespan=lifespan)
 
-
-# Hardcoded users for POC
 FAKE_USERS_DB = {
     "user1@example.com": {
-        "hashed_password": "password123",
-        "email": "user1@example.com",
-        "id": "user1"
+        "hashed_password": "password123", "email": "user1@example.com", "id": "user1"
     },
     "user2@example.com": {
-        "hashed_password": "password456",
-        "email": "user2@example.com",
-        "id": "user2"
+        "hashed_password": "password456", "email": "user2@example.com", "id": "user2"
+    },
+    "tanayagrawal@mansematch.com": {
+        "hashed_password": "IAmTanay98", "email": "tanayagrawal@mansematch.com", "id": "tanay1"
     }
 }
 
@@ -2990,7 +3603,6 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals['html_escape'] = html.escape
 templates.env.filters['json_dumps'] = json.dumps
 
-# --- BFI-10 Specific Data ---
 BFI10_TRAIT_DESCRIPTIONS = {
     "Extraversion": "Reflects tendency to be sociable, assertive, and energetic vs. reserved and quiet.",
     "Agreeableness": "Reflects tendency to be compassionate, cooperative, and kind vs. antagonistic and critical.",
@@ -3003,62 +3615,125 @@ def get_bfi10_interpretation_details(trait_name: str, score: Optional[float]) ->
     level = "N/A"
     level_description = "Score not available or trait not applicable."
     if score is not None:
-        if score < 2.5:
-            level = "Low"
-            if trait_name == "Neuroticism":
-                level_description = "Indicates a tendency to be calm, emotionally stable, and resilient to stress."
-            else:
-                level_description = f"Indicates a lower expression of typical {trait_name.lower()} characteristics."
-        elif score <= 3.5:
-            level = "Average"
-            level_description = f"Indicates a moderate or balanced expression of typical {trait_name.lower()} characteristics."
-        else:  # score > 3.5
-            level = "High"
-            if trait_name == "Neuroticism":
-                level_description = "Indicates a tendency to experience emotional fluctuations, anxiety, or moodiness more frequently."
-            else:
-                level_description = f"Indicates a higher expression of typical {trait_name.lower()} characteristics."
-    else: # Explicitly handle case where score is None
-        level = "N/A" # or "Not Scored"
+        if score < 2.5: level = "Low"
+        elif score <= 3.5: level = "Average"
+        else: level = "High"
+
+        if trait_name == "Neuroticism":
+            if level == "Low": level_description = "Indicates a tendency to be calm, emotionally stable, and resilient to stress."
+            elif level == "Average": level_description = f"Indicates a moderate or balanced expression of typical {trait_name.lower()} characteristics."
+            else: level_description = "Indicates a tendency to experience emotional fluctuations, anxiety, or moodiness more frequently."
+        else:
+            if level == "Low": level_description = f"Indicates a lower expression of typical {trait_name.lower()} characteristics."
+            elif level == "Average": level_description = f"Indicates a moderate or balanced expression of typical {trait_name.lower()} characteristics."
+            else: level_description = f"Indicates a higher expression of typical {trait_name.lower()} characteristics."
+    else:
+        level = "N/A"
         level_description = "This trait was not scored."
 
-
     general_description = BFI10_TRAIT_DESCRIPTIONS.get(trait_name, "General description not available.")
-
     return {
         "level": level,
         "level_specific_description": level_description,
         "general_trait_description": general_description
     }
 
+MAS12_SUBSCALE_MAP = {
+    "PP": "Power-Prestige", "RT": "Retention-Time", "D": "Distrust", "A": "Anxiety"
+}
+MAS12_SUBSCALE_FULL_NAMES = list(MAS12_SUBSCALE_MAP.values())
 
-# --- Custom Exception for HTMX Redirects ---
+def get_mas12_interpretation_details(dimension_name: str, score: Optional[float]) -> str:
+    if score is None: return "Score not available."
+    level = "Low" if score < 2.5 else "Medium" if score <= 3.5 else "High"
+    interpretation_map = {
+        "Power-Prestige": {
+            "Low": "Minimal view of money as a status symbol.",
+            "Medium": "Views money as a moderate status symbol.",
+            "High": "Strongly views money as a symbol of status and success."
+        },
+        "Retention-Time": {
+            "Low": "Less focused on saving and long-term planning.",
+            "Medium": "Moderate focus on saving and planning for the future.",
+            "High": "Strong focus on saving and future financial planning."
+        },
+        "Distrust": {
+            "Low": "Generally trusting in money matters and dealings with others.",
+            "Medium": "Some caution regarding money and others' motives.",
+            "High": "Significant suspicion or cynicism about money dealings and motives."
+        },
+        "Anxiety": {
+            "Low": "Little worry or stress about financial matters.",
+            "Medium": "Moderate worry or concern about finances.",
+            "High": "Frequent and significant anxiety or stress concerning money."
+        }
+    }
+    interp_text = interpretation_map.get(dimension_name, {}).get(level, "Interpretation not available.")
+    return f"{level}: {interp_text}"
+
+def calculate_mas12_scores(questions: List[Dict[str, Any]], user_answers_dict: Dict[str, Union[int, float]]) -> Dict[str, Optional[float]]:
+    subscale_scores: Dict[str, List[float]] = {name: [] for name in MAS12_SUBSCALE_FULL_NAMES}
+    for question in questions:
+        q_id_str, key_short = str(question.get("id")), question.get("key")
+        user_answer_val = user_answers_dict.get(q_id_str)
+        if user_answer_val is None or key_short is None:
+            logger.warning(f"MAS-12 QID {q_id_str}: missing answer/key. Ans: {user_answers_dict}")
+            continue
+        full_subscale_name = MAS12_SUBSCALE_MAP.get(key_short)
+        if not full_subscale_name:
+            logger.warning(f"MAS-12 QID {q_id_str}: unknown key '{key_short}'")
+            continue
+        try:
+            answer_val = float(user_answer_val)
+            if not (1 <= answer_val <= 5):
+                logger.warning(f"MAS-12 QID {q_id_str}: ans {answer_val} out of 1-5 range.")
+                continue
+            subscale_scores[full_subscale_name].append(answer_val)
+        except (ValueError, TypeError):
+            logger.error(f"MAS-12 QID {q_id_str}: non-numeric ans '{user_answer_val}'")
+            continue
+    final_avg_scores: Dict[str, Optional[float]] = {}
+    for name, scores_list in subscale_scores.items():
+        final_avg_scores[name] = round(sum(scores_list) / len(scores_list), 2) if scores_list else None
+        if not scores_list: logger.warning(f"MAS-12: No valid scores for subscale {name}")
+    return final_avg_scores
+
 class HtmxRedirectException(HTTPException):
     def __init__(self, redirect_url: str):
-        super().__init__(status_code=200, detail="HTMX redirect") # 200 is often used for HTMX redirects
-        self.headers = {"HX-Redirect": redirect_url}
+        super().__init__(status_code=200, detail="HTMX redirect", headers={"HX-Redirect": redirect_url})
 
 @app.exception_handler(HtmxRedirectException)
 async def htmx_redirect_exception_handler(request: Request, exc: HtmxRedirectException):
     return Response(content=exc.detail, status_code=exc.status_code, headers=exc.headers)
 
-
-# --- Helper Functions ---
+# --- Modified Helper Function ---
 def load_quizzes_data() -> Dict[str, Any]:
-    try:
-        with open(QUIZZES_DATA_FILE, 'r') as f:
-            data = json.load(f)
-            logger.debug(f"Successfully loaded quiz definitions from {QUIZZES_DATA_FILE}")
-            return data
-    except FileNotFoundError:
-        logger.error(f"{QUIZZES_DATA_FILE} not found. Returning empty quiz definitions.")
-        return {"quizzes": []}
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding {QUIZZES_DATA_FILE}: {e}. Returning empty quiz definitions.")
+    all_quizzes_list = []
+    quiz_files = [BIG_FIVE_QUIZ_FILE, MAS_QUIZ_FILE]
+
+    for file_path in quiz_files:
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+                if "quizzes" in data and isinstance(data["quizzes"], list):
+                    all_quizzes_list.extend(data["quizzes"])
+                    logger.debug(f"Successfully loaded {len(data['quizzes'])} quiz(zes) from {file_path}")
+                else:
+                    logger.warning(f"File {file_path} does not contain a 'quizzes' list. Skipping.")
+        except FileNotFoundError:
+            logger.error(f"Quiz data file {file_path} not found.")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding {file_path}: {e}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while loading {file_path}: {e}")
+
+    if not all_quizzes_list:
+        logger.warning("No quiz definitions loaded. Returning empty quiz list.")
         return {"quizzes": []}
 
+    return {"quizzes": all_quizzes_list}
 
-# --- Authentication Dependencies ---
+# --- Authentication Dependencies (no changes) ---
 async def get_current_user_from_cookie(request: Request) -> Optional[Dict[str, Any]]:
     user_email = request.cookies.get("user_session")
     if user_email and user_email in FAKE_USERS_DB:
@@ -3073,13 +3748,11 @@ async def get_current_user_or_htmx_redirect(
         logger.warning(f"User not authenticated. Path: {request.url.path}. HX-Request: {'hx-request' in request.headers}")
         if "hx-request" in request.headers:
             raise HtmxRedirectException(redirect_url=app.url_path_for("auth_page_route"))
-        else: # Standard redirect for non-HTMX requests
-            # Using 307 to preserve method if original was POST, though for GET this is fine
+        else:
             raise HTTPException(status_code=307, detail="Not authenticated", headers={"Location": app.url_path_for("auth_page_route")})
     return current_user
 
-
-# --- Middleware for common template variables ---
+# --- Middleware (no changes) ---
 @app.middleware("http")
 async def common_template_vars_middleware(request: Request, call_next):
     request.state.user = await get_current_user_from_cookie(request)
@@ -3087,35 +3760,25 @@ async def common_template_vars_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-
-# --- Routes ---
+# --- Routes (no changes to endpoints, but internal logic uses new load_quizzes_data) ---
 
 @app.get("/", response_class=HTMLResponse, name="homepage")
 async def homepage_route(request: Request):
     logger.info(f"Homepage requested by user: {request.state.user.get('email') if request.state.user else 'Anonymous'}")
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "title": "Welcome - mansematch"
-    })
+    return templates.TemplateResponse("index.html", {"request": request, "title": "Welcome - mansematch"})
 
 @app.post("/subscribe", name="subscribe")
 async def subscribe_email_route(request: Request, email: str = Form(...)):
     logger.info(f"New email subscription: {email}")
-    escaped_email = html.escape(email)
-    return HTMLResponse(f"<p class='text-green-600 font-semibold'>Thank you for subscribing, {escaped_email}!</p>")
-
+    return HTMLResponse(f"<p class='text-green-600 font-semibold'>Thank you for subscribing, {html.escape(email)}!</p>")
 
 @app.get("/auth", response_class=HTMLResponse, name="auth_page_route")
 async def auth_page_route(request: Request):
     if request.state.user:
         logger.info(f"User {request.state.user['email']} already authenticated, redirecting to dashboard.")
-        # Using 303 See Other for redirect after GET if resource has moved or state changes
         return RedirectResponse(url=app.url_path_for("dashboard_page_route"), status_code=303)
     logger.info("Auth page requested.")
-    return templates.TemplateResponse("auth.html", {
-        "request": request,
-        "title": "Sign In / Sign Up"
-    })
+    return templates.TemplateResponse("auth.html", {"request": request, "title": "Sign In / Sign Up"})
 
 @app.post("/login", name="login_route")
 async def login_user_route(request: Request, email: str = Form(...), password: str = Form(...)):
@@ -3123,346 +3786,232 @@ async def login_user_route(request: Request, email: str = Form(...), password: s
     if not user or user["hashed_password"] != password:
         logger.warning(f"Login failed for email: {email}")
         return HTMLResponse("<p class='text-red-600'>Invalid email or password. Please try again.</p>", status_code=401)
-
     logger.info(f"User {email} logged in successfully.")
-    response = HTMLResponse(content="<p>Login successful! Redirecting...</p>", status_code=200) # Keep 200 for HTMX
-    response.set_cookie(
-        key="user_session",
-        value=user["email"],
-        httponly=True,
-        max_age=1800, # 30 minutes
-        samesite="Lax", # Good default
-        secure=request.url.scheme == "https", # Only send over HTTPS if applicable
-        path="/"
-    )
+    response = HTMLResponse(content="<p>Login successful! Redirecting...</p>", status_code=200)
+    response.set_cookie(key="user_session", value=user["email"], httponly=True, max_age=1800, samesite="Lax", secure=request.url.scheme == "https", path="/")
     redirect_url = app.url_path_for("dashboard_page_route")
     response.headers["HX-Redirect"] = redirect_url
     logger.debug(f"Login successful, HX-Redirecting to: {redirect_url}")
     return response
 
 @app.post("/logout", name="logout_route")
-async def logout_user_route(request: Request): # No current_user dependency needed here as we are logging out
-    user_email_before_logout = request.state.user.get('email') if request.state.user else "Unknown (already logged out or session expired)"
-    logger.info(f"User {user_email_before_logout} initiating logout.")
-
-    # Prepare context for the page we are redirecting to (homepage)
-    # The middleware will re-evaluate user for the template, but we want to ensure
-    # the user is None for the template rendered in *this* response.
-    context = {
-        "request": request,
-        "title": "Welcome - mansematch",
-        "user": None # Explicitly set user to None for rendering index.html
-    }
+async def logout_user_route(request: Request):
+    user_email = request.state.user.get('email') if request.state.user else "Unknown"
+    logger.info(f"User {user_email} initiating logout.")
+    context = {"request": request, "title": "Welcome - mansematch", "user": None}
     html_content = templates.get_template("index.html").render(context)
-
     response = HTMLResponse(content=html_content)
-    response.delete_cookie(
-        "user_session",
-        httponly=True,
-        samesite="Lax",
-        secure=request.url.scheme == "https",
-        path="/"
-    )
-    # HX-Push-Url updates the browser's URL bar.
-    # Since we are returning the full new page content for "/", this is good.
+    response.delete_cookie("user_session", httponly=True, samesite="Lax", secure=request.url.scheme == "https", path="/")
     response.headers["HX-Push-Url"] = app.url_path_for("homepage")
     return response
 
-
 @app.get("/dashboard", response_class=HTMLResponse, name="dashboard_page_route")
-async def dashboard_page_route(
-    request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)
-):
+async def dashboard_page_route(request: Request, current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)):
     logger.info(f"Dashboard requested by user: {current_user['email']}")
-    quizzes_definitions = load_quizzes_data().get("quizzes", [])
-
+    quizzes_definitions = load_quizzes_data().get("quizzes", []) # This now loads from split files
     user_reports = []
-    if reports_collection is not None:
+    if database.reports_collection is not None:
         try:
-            report_cursor = reports_collection.find({"user_id": current_user["id"]}).sort("date_taken", -1)
+            report_cursor = database.reports_collection.find({"user_id": current_user["id"]}).sort("date_taken", -1)
             user_reports = list(report_cursor)
-            logger.debug(f"User {current_user['email']} has {len(user_reports)} reports from MongoDB.")
+            logger.debug(f"User {current_user['email']} has {len(user_reports)} reports.")
         except Exception as e:
-            logger.error(f"Error fetching reports from MongoDB for user {current_user['email']}: {e}")
-            # Consider raising HTTPException or passing an error to the template
-            # For now, it will show "no reports" if DB fails.
+            logger.error(f"Error fetching reports for user {current_user['email']}: {e}")
     else:
-        logger.warning("Reports collection is not available. Cannot fetch reports for dashboard.")
-
+        logger.warning("Reports collection N/A. Cannot fetch reports for dashboard.")
     return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "title": "Dashboard - mansematch",
-        "user": current_user,
-        "quizzes": quizzes_definitions,
-        "reports": user_reports
+        "request": request, "title": "Dashboard - mansematch", "user": current_user,
+        "quizzes": quizzes_definitions, "reports": user_reports
     })
 
-# --- Quiz Routes ---
 @app.get("/quiz/{quiz_id}", response_class=HTMLResponse, name="quiz_page_route")
-async def quiz_page_route(
-    request: Request,
-    quiz_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)
-):
-    logger.info(f"Quiz page requested for quiz_id: {quiz_id} by user: {current_user['email']}")
-    all_quiz_definitions = load_quizzes_data()
+async def quiz_page_route(request: Request, quiz_id: str, current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)):
+    logger.info(f"Quiz page for quiz_id: {quiz_id} by user: {current_user['email']}")
+    all_quiz_definitions = load_quizzes_data() # Loads from split files
     quiz_detail = next((q for q in all_quiz_definitions.get("quizzes", []) if q["id"] == quiz_id), None)
-
     if not quiz_detail:
-        logger.warning(f"Quiz ID: {quiz_id} not found when requested by user {current_user['email']}.")
+        logger.warning(f"Quiz ID: {quiz_id} not found for user {current_user['email']}.")
         raise HTTPException(status_code=404, detail=f"Quiz ID: {quiz_id} not found.")
-
-    if "questions" not in quiz_detail:
-        logger.debug(f"Quiz ID: {quiz_id} has no 'questions' key. Defaulting to empty list.")
-        quiz_detail["questions"] = []
-
-    logger.debug(f"Quiz detail for quiz_id {quiz_id} being sent to template (summary): title='{quiz_detail.get('title')}', num_questions={len(quiz_detail.get('questions',[]))}")
-
+    quiz_detail.setdefault("questions", [])
+    logger.debug(f"Quiz '{quiz_detail.get('title')}' ({len(quiz_detail['questions'])}Q) for template.")
     return templates.TemplateResponse("quiz_page.html", {
-        "request": request,
-        "title": f"Quiz: {html.escape(quiz_detail.get('title', 'Untitled Quiz'))}",
-        "user": current_user,
-        "quiz": quiz_detail
+        "request": request, "title": f"Quiz: {html.escape(quiz_detail.get('title', 'Quiz'))}",
+        "user": current_user, "quiz": quiz_detail
     })
-
-
 
 def calculate_bfi10_scores(questions: List[Dict[str, Any]], user_answers_dict: Dict[str, Union[int, float]]) -> Dict[str, Optional[float]]:
+    # (Implementation as before)
     scores: Dict[str, List[float]] = {"E": [], "A": [], "C": [], "N": [], "O": []}
     trait_map = {
         "E": "Extraversion", "A": "Agreeableness", "C": "Conscientiousness",
         "N": "Neuroticism", "O": "Openness"
     }
-
     for question in questions:
-        q_id_str = str(question.get("id"))
-        key = question.get("key")
+        q_id_str, key = str(question.get("id")), question.get("key")
         user_answer_val = user_answers_dict.get(q_id_str)
-
         if user_answer_val is None or key is None:
-            logger.warning(f"Missing answer or key for BFI-10 question ID: {q_id_str}. User answers: {user_answers_dict}")
+            logger.warning(f"BFI-10 QID {q_id_str}: missing answer/key. Ans: {user_answers_dict}")
             continue
-
-        # Ensure user_answer_val is float for calculations
         try:
             answer_val = float(user_answer_val)
         except (ValueError, TypeError):
-            logger.error(f"Invalid non-numeric answer for BFI-10 question {q_id_str}: {user_answer_val}")
+            logger.error(f"BFI-10 QID {q_id_str}: non-numeric ans '{user_answer_val}'")
             continue
-
-        trait_code = key[0]
-        is_reversed = key.endswith("_R")
-
+        trait_code, is_reversed = key[0], key.endswith("_R")
         if trait_code not in scores:
-            logger.warning(f"Unknown trait '{trait_code}' in key '{key}' for question {q_id_str}")
+            logger.warning(f"BFI-10 QID {q_id_str}: unknown trait '{trait_code}' in key '{key}'")
             continue
-
-        actual_score = (6 - answer_val) if is_reversed else answer_val
-        scores[trait_code].append(actual_score)
-
+        scores[trait_code].append((6 - answer_val) if is_reversed else answer_val)
     final_scores: Dict[str, Optional[float]] = {}
     for trait_code, items_scores in scores.items():
         trait_name = trait_map.get(trait_code)
-        if not trait_name:
-            logger.warning(f"Trait code {trait_code} not found in trait_map.")
-            continue
-        if items_scores:
-            avg_score = sum(items_scores) / len(items_scores)
-            final_scores[trait_name] = round(avg_score, 2)
-        else:
-            final_scores[trait_name] = None
-            logger.warning(f"No valid scores recorded for BFI-10 trait: {trait_name} (Code: {trait_code})")
+        if not trait_name: continue
+        final_scores[trait_name] = round(sum(items_scores) / len(items_scores), 2) if items_scores else None
+        if not items_scores: logger.warning(f"BFI-10: No valid scores for trait {trait_name}")
     return final_scores
 
 @app.post("/quiz/{quiz_id}/submit", name="submit_quiz_route")
-async def submit_quiz_route(
-    request: Request,
-    quiz_id: str,
-    answers: str = Form(...), # answers is a JSON string from the form
-    current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)
-):
-    logger.info(f"Quiz submission for quiz_id: {quiz_id} by user: {current_user['email']}")
-    logger.debug(f"Raw answers JSON string from form: {answers}")
-
-    if reports_collection is None:
-        logger.error("Reports collection is not available. Cannot save quiz submission.")
-        raise HTTPException(status_code=503, detail="Database service unavailable. Cannot save quiz results.")
-
-    all_quiz_definitions = load_quizzes_data()
+async def submit_quiz_route(request: Request, quiz_id: str, answers: str = Form(...), current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)):
+    logger.info(f"Quiz submission: {quiz_id} by user: {current_user['email']}")
+    logger.debug(f"Raw answers JSON: {answers}")
+    if database.reports_collection is None:
+        logger.error("DB N/A. Cannot save quiz submission.")
+        raise HTTPException(status_code=503, detail="DB service unavailable.")
+    all_quiz_definitions = load_quizzes_data() # Loads from split files
     quiz_detail = next((q for q in all_quiz_definitions.get("quizzes", []) if q["id"] == quiz_id), None)
-
     if not quiz_detail:
-        logger.error(f"Quiz ID: {quiz_id} not found during submission by user {current_user['email']}.")
-        raise HTTPException(status_code=404, detail=f"Quiz ID: {quiz_id} not found.")
-
+        logger.error(f"Quiz ID {quiz_id} not found during submission by {current_user['email']}.")
+        raise HTTPException(status_code=404, detail=f"Quiz ID {quiz_id} not found.")
     try:
-        # user_answers_dict will have string keys, and values can be numbers or strings
         user_answers_dict: Dict[str, Any] = json.loads(answers)
         logger.debug(f"Parsed user answers: {user_answers_dict}")
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid answers JSON format from user {current_user['email']} for quiz {quiz_id}: {e}")
+        logger.error(f"Invalid answers JSON from {current_user['email']} for {quiz_id}: {e}")
         raise HTTPException(status_code=400, detail="Invalid answers format.")
 
     quiz_questions = quiz_detail.get("questions", [])
     report_score: Union[str, Dict[str, Optional[float]]]
-    report_type = "standard" # Default report type
+    report_type = "standard"
 
     if quiz_id == "bfi-10":
         report_type = "bfi-10"
-        # Ensure BFI-10 answers are numeric, as expected by calculate_bfi10_scores
-        bfi_numeric_answers: Dict[str, Union[int, float]] = {}
-        all_answers_valid = True
-        for q_def in quiz_questions:
-            q_id_str = str(q_def.get("id"))
-            ans_val = user_answers_dict.get(q_id_str)
-            try:
-                bfi_numeric_answers[q_id_str] = float(ans_val) # Convert to float
-            except (ValueError, TypeError):
-                logger.error(f"BFI-10 answer for Q_ID {q_id_str} is not convertible to float: {ans_val}. User: {current_user['email']}")
-                all_answers_valid = False
-                # Optionally, you might want to assign a default or skip, but erroring out is safer if all answers are required.
-                # For now, calculate_bfi10_scores will skip invalid ones.
-
-        # If strict validation is needed:
-        # if not all_answers_valid:
-        #     raise HTTPException(status_code=400, detail="One or more BFI-10 answers were not valid numbers.")
-
+        bfi_numeric_answers: Dict[str, Union[int, float]] = {
+            str(q.get("id")): float(user_answers_dict.get(str(q.get("id"))))
+            for q in quiz_questions if user_answers_dict.get(str(q.get("id"))) is not None
+        }
         report_score = calculate_bfi10_scores(quiz_questions, bfi_numeric_answers)
         logger.info(f"User {current_user['email']} BFI-10 scores: {report_score}")
-
-    else: # Standard quiz scoring
-        correct_answers_count = 0
-        total_questions = len(quiz_questions)
-        if total_questions > 0:
-            for question in quiz_questions:
-                question_id_str = str(question.get("id"))
-                user_answer = user_answers_dict.get(question_id_str) # User answer could be string or number from JSON
-                correct_answer = question.get("answer") # Correct answer from quizzes_data.json
-                # Compare as strings to handle type discrepancies (e.g., "8" vs 8)
-                if user_answer is not None and str(user_answer) == str(correct_answer):
-                    correct_answers_count += 1
-            score_percentage = (correct_answers_count / total_questions) * 100
-        else:
-            score_percentage = 0
-        report_score = f"{score_percentage:.0f}%" # Format as whole number percentage string
-        logger.info(f"User {current_user['email']} scored {report_score} on quiz {quiz_id}.")
+    elif quiz_id == "mas-12":
+        report_type = "mas-12"
+        mas_numeric_answers: Dict[str, Union[int, float]] = {
+             str(q.get("id")): float(user_answers_dict.get(str(q.get("id"))))
+            for q in quiz_questions if user_answers_dict.get(str(q.get("id"))) is not None
+        }
+        report_score = calculate_mas12_scores(quiz_questions, mas_numeric_answers)
+        logger.info(f"User {current_user['email']} MAS-12 scores: {report_score}")
+    else:
+        # Generic scoring was removed, if other quiz types are added, this part needs scoring logic.
+        # For now, since only BFI-10 and MAS-12 exist, this 'else' block is effectively dead code.
+        # If a quiz_id other than bfi-10 or mas-12 is submitted, it will fall here.
+        logger.warning(f"Quiz {quiz_id} submitted by {current_user['email']} has no specific scoring. Defaulting score.")
+        report_score = "N/A - Scoring not implemented for this quiz type"
+        report_type = quiz_id # Or a generic 'other' type
 
     new_report_id = f"rep_{uuid4().hex[:10]}"
     new_report_doc = {
-        "id": new_report_id,
-        "user_id": current_user["id"],
-        "quiz_id": quiz_id,
-        "quiz_title": quiz_detail.get('title', 'Untitled Quiz'),
-        "quiz_description": quiz_detail.get('description', 'No description available.'),
-        "score": report_score, # Can be Dict for BFI-10 or string for others
-        "date_taken": datetime.utcnow(),
-        "answers_submitted": user_answers_dict, # Store the original parsed answers
-        "report_type": report_type
+        "id": new_report_id, "user_id": current_user["id"], "quiz_id": quiz_id,
+        "quiz_title": quiz_detail.get('title', 'Quiz'),
+        "quiz_description": quiz_detail.get('description', 'No description.'),
+        "score": report_score, "date_taken": datetime.utcnow(),
+        "answers_submitted": user_answers_dict, "report_type": report_type
     }
-
     try:
-        insert_result = reports_collection.insert_one(new_report_doc)
-        # PyMongo's insert_one returns InsertOneResult, _id is on insert_result.inserted_id
-        logger.info(f"New report {new_report_id} (MongoDB _id: {insert_result.inserted_id}) saved for user {current_user['email']}.")
+        insert_result = database.reports_collection.insert_one(new_report_doc)
+        logger.info(f"New report {new_report_id} (DB _id: {insert_result.inserted_id}) saved for {current_user['email']}.")
     except Exception as e:
-        logger.error(f"Error saving report {new_report_id} to MongoDB for user {current_user['email']}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save quiz results due to a database error.")
-
-    # Redirect to the specific report page using the custom 'id'
+        logger.error(f"Error saving report {new_report_id} to DB for {current_user['email']}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save quiz results.")
     report_page_url = app.url_path_for("report_page_route", report_id=new_report_id)
-    logger.info(f"Redirecting user {current_user['email']} to report page: {report_page_url}")
-    # Using 303 See Other for redirect after POST
+    logger.info(f"Redirecting {current_user['email']} to report: {report_page_url}")
     return RedirectResponse(url=report_page_url, status_code=303)
 
 @app.get("/healthz", status_code=200)
-async def health_check_route():
-    return {"status": "ok"}
+async def health_check_route(): return {"status": "ok"}
 
 @app.get("/report/{report_id}", name="report_page_route")
-async def report_page_route(
-    request: Request,
-    report_id: str,
-    current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)
-):
-    logger.info(f"User {current_user['email']} requesting report page for report_id: {report_id}")
-
-    if reports_collection is None:
-        logger.error(f"Reports collection unavailable when trying to view report {report_id}")
-        raise HTTPException(status_code=503, detail="Database service unavailable. Cannot load report.")
-
+async def report_page_route(request: Request, report_id: str, current_user: Dict[str, Any] = Depends(get_current_user_or_htmx_redirect)):
+    logger.info(f"User {current_user['email']} requesting report: {report_id}")
+    if database.reports_collection is None:
+        logger.error(f"DB N/A for report {report_id}")
+        raise HTTPException(status_code=503, detail="DB service unavailable.")
     try:
-        # Query using the custom 'id' field, not MongoDB's '_id'
-        report_detail = reports_collection.find_one({"id": report_id, "user_id": current_user["id"]})
+        report_detail = database.reports_collection.find_one({"id": report_id, "user_id": current_user["id"]})
     except Exception as e:
-        logger.error(f"Error fetching report {report_id} from MongoDB for user {current_user['email']}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to load report due to a database error.")
-
+        logger.error(f"Error fetching report {report_id} from DB for {current_user['email']}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load report.")
     if not report_detail:
-        logger.warning(f"Report ID: {report_id} not found or access denied for user {current_user['email']}.")
-        raise HTTPException(status_code=404, detail=f"Report ID: {report_id} not found or access denied.")
+        logger.warning(f"Report {report_id} not found or access denied for {current_user['email']}.")
+        raise HTTPException(status_code=404, detail=f"Report {report_id} not found/denied.")
 
     context = {
-        "request": request,
-        "title": f"Report: {html.escape(report_detail.get('quiz_title', 'Quiz Report'))}",
-        "user": current_user,
-        "report": report_detail # Pass the full report document
+        "request": request, "title": f"Report: {html.escape(report_detail.get('quiz_title', 'Report'))}",
+        "user": current_user, "report": report_detail
     }
+    report_type, score_data = report_detail.get("report_type"), report_detail.get("score")
 
-    if report_detail.get("report_type") == "bfi-10" and isinstance(report_detail.get("score"), dict):
-        trait_scores: Dict[str, Optional[float]] = report_detail["score"]
+    if report_type == "bfi-10" and isinstance(score_data, dict):
+        trait_scores: Dict[str, Optional[float]] = score_data
         radar_labels = ["Extraversion", "Agreeableness", "Conscientiousness", "Neuroticism", "Openness"]
-        # Handle None scores for radar data by defaulting to 0 or another placeholder
-        radar_data = [trait_scores.get(label, 0.0) if trait_scores.get(label) is not None else 0.0 for label in radar_labels]
-
-        context["radar_chart_labels"] = radar_labels
-        context["radar_chart_data"] = radar_data
-
+        radar_data = [trait_scores.get(label, 0.0) or 0.0 for label in radar_labels]
+        context["radar_chart_labels"], context["radar_chart_data"] = radar_labels, radar_data
         table_data = []
         for trait in radar_labels:
-            score_value = trait_scores.get(trait) # This can be float or None
-            interpretation = get_bfi10_interpretation_details(trait, score_value)
+            score_val = trait_scores.get(trait)
+            interp = get_bfi10_interpretation_details(trait, score_val)
             table_data.append({
-                "trait": trait,
-                "score": score_value if score_value is not None else "N/A",
-                "interpretation_level": interpretation["level"],
-                "interpretation_description": interpretation["level_specific_description"],
-                "general_trait_description": interpretation["general_trait_description"]
+                "trait": trait, "score": score_val if score_val is not None else "N/A",
+                "interpretation_level": interp["level"],
+                "interpretation_description": interp["level_specific_description"],
+                "general_trait_description": interp["general_trait_description"]
             })
         context["bfi_table_data"] = table_data
-        logger.debug(f"Prepared BFI-10 report data for {report_id}: Scores {trait_scores}, Radar Data {radar_data}")
+        logger.debug(f"Prepared BFI-10 report data for {report_id}")
         return templates.TemplateResponse("big_five_report.html", context)
-    else:
-        logger.debug(f"Displaying generic report for {report_id}")
+    elif report_type == "mas-12" and isinstance(score_data, dict):
+        subscale_scores: Dict[str, Optional[float]] = score_data
+        pie_labels, pie_values = [], []
+        for name in MAS12_SUBSCALE_FULL_NAMES:
+            score = subscale_scores.get(name)
+            if score is not None:
+                pie_labels.append(name)
+                pie_values.append(score)
+        total_sum = sum(pie_values)
+        pie_percentages = [(v / total_sum) * 100 if total_sum > 0 else (100 / len(pie_values) if pie_values else 0) for v in pie_values]
+        context["pie_chart_labels"], context["pie_chart_data"] = pie_labels, pie_percentages
+        mas_table_data = []
+        for name in MAS12_SUBSCALE_FULL_NAMES:
+            score_val = subscale_scores.get(name)
+            mas_table_data.append({
+                "dimension": name, "score": score_val if score_val is not None else "N/A",
+                "interpretation": get_mas12_interpretation_details(name, score_val)
+            })
+        context["mas_table_data"] = mas_table_data
+        logger.debug(f"Prepared MAS-12 report data for {report_id}")
+        return templates.TemplateResponse("mas_report.html", context)
+    else: # Generic report page if type doesn't match or score isn't a dict
+        logger.debug(f"Displaying generic report for {report_id} (type: {report_type})")
         return templates.TemplateResponse("report_page.html", context)
 
-
-# --- Main Execution (for local development) ---
 if __name__ == "__main__":
     import uvicorn
-    # This check is informative for local runs; DB connection status is handled by lifespan.
     logger.info("Attempting to run Uvicorn for local development...")
-    if os.getenv("MONGO_URI") and reports_collection is None and app.router.lifespan_context:
-         # If MONGO_URI is set, we expect a connection. If reports_collection is still None
-         # after lifespan should have run (or tried to run connect_to_mongo on import if lifespan isn't used),
-         # it means connection likely failed.
-         logger.warning(
-            "MongoDB URI is set, but reports_collection is None. "
-            "Database features might be unavailable if connection failed during startup."
-        )
+    if os.getenv("MONGO_URI") and database.reports_collection is None and hasattr(app.router, 'lifespan_context') and app.router.lifespan_context:
+         logger.warning("MongoDB URI set, but reports_collection is None. DB features might be unavailable.")
     elif not os.getenv("MONGO_URI"):
         logger.warning("MONGO_URI not set. MongoDB features will be disabled.")
-
-
-    # For local development, it's fine to use reload.
-    # The Uvicorn command in Dockerfile is what's used for deployment.
     uvicorn.run(
-        "app.main:app", # Correctly reference the app instance within the package
-        host=os.getenv("HOST", "0.0.0.0"), # HOST for Render
-        port=int(os.getenv("PORT", 8000)), # PORT for Render
-        reload=True, # Enable reload for local development
-        reload_dirs=[str(BASE_DIR.parent)], # Watch the parent of 'app' (project root)
-        log_level=os.getenv("LOG_LEVEL", "info").lower()
+        "app.main:app", host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8000)),
+        reload=True, reload_dirs=[str(BASE_DIR.parent)], log_level=os.getenv("LOG_LEVEL", "info").lower()
     )
 </file>
 

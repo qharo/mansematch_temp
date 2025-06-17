@@ -50,11 +50,21 @@
         </div>
 
         <!-- Radar Chart Section -->
-        <section class="mb-12 p-6 bg-gray-50 rounded-lg shadow-inner">
+        <section
+            class="mb-12 p-6 bg-gray-50 rounded-lg shadow-inner chart-section"
+        >
+            {# Added class #}
             <!-- Removed: <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Your Personality Profile</h2> -->
             <div class="max-w-xl mx-auto">
                 <canvas id="bfiRadarChart"></canvas>
             </div>
+            {# Jinja check for initial message display - JS will hide it if data
+            is good #} {% if not radar_chart_labels or not radar_chart_data %}
+            <p class="text-center text-gray-500 mt-4 chart-message">
+                Personality profile chart data is not available or is
+                incomplete.
+            </p>
+            {% endif %}
         </section>
 
         <!-- Table with Trait, Score, and Interpretation Section -->
@@ -105,7 +115,9 @@
                                 class="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
                             >
                                 {{ "%.2f" | format(item.score) if item.score !=
-                                'N/A' else 'N/A' }}
+                                'N/A' and item.score is number else item.score
+                                }} {# item.score can be 'N/A' string or a number
+                                #}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span
@@ -128,45 +140,62 @@
 {% endblock %} {% block scripts %} {{ super() }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const ctx = document.getElementById('bfiRadarChart');
+    console.log('[BFI SCRIPT] Block started. Waiting for Chart.js and DOM ready state.');
 
-        if (!ctx) {
-            console.error("Radar chart canvas element 'bfiRadarChart' not found.");
+    function initializeBfiRadarChart() {
+        console.log('[BFI SCRIPT] Attempting initializeBfiRadarChart().');
+        const ctxRadar = document.getElementById('bfiRadarChart');
+        const chartSection = document.querySelector('.chart-section'); // Target the section
+        let chartMessageEl = chartSection ? chartSection.querySelector('.chart-message') : null;
+
+
+        if (!ctxRadar) {
+            console.error("[BFI SCRIPT] Radar chart canvas 'bfiRadarChart' NOT FOUND.");
+             if (chartMessageEl) chartMessageEl.textContent = "Chart canvas element missing from page.";
+            else if (chartSection) {
+                const p = document.createElement('p');
+                p.className = 'text-center text-red-500 mt-4 chart-message-fallback';
+                p.textContent = 'Error: Chart canvas element not found.';
+                chartSection.appendChild(p);
+            }
             return;
         }
+        console.log("[BFI SCRIPT] Canvas 'bfiRadarChart' IS FOUND:", ctxRadar);
 
         let radarLabelsFromJinja;
         let radarDataFromJinja;
 
         try {
-            radarLabelsFromJinja = {{ radar_chart_labels | json_dumps | safe }};
-            radarDataFromJinja = {{ radar_chart_data | json_dumps | safe }};
+            radarLabelsFromJinja = {{ radar_chart_labels | default([]) | json_dumps | safe }};
+            radarDataFromJinja = {{ radar_chart_data | default([]) | json_dumps | safe }};
+            console.log("[BFI SCRIPT] Jinja data parsed - Labels:", JSON.stringify(radarLabelsFromJinja), "Data:", JSON.stringify(radarDataFromJinja));
         } catch (e) {
-            console.error("Error parsing Jinja chart data variables:", e);
-            const chartContainer = ctx.parentElement;
+            console.error("[BFI SCRIPT] Error parsing Jinja chart data variables:", e);
+            const chartContainer = ctxRadar.parentElement;
             if (chartContainer) {
-                chartContainer.innerHTML = '<p class="text-center text-red-500">Error loading chart data. Check console.</p>';
+                chartContainer.innerHTML = '<p class="text-center text-red-500">Error loading chart data (parse error). Check console.</p>';
             }
             return;
         }
 
-        // console.log("Raw radarLabels from Jinja:", radarLabelsFromJinja); // Keep for debugging if needed
-        // console.log("Raw radarData from Jinja:", radarDataFromJinja); // Keep for debugging if needed
-
         const isValidArray = (arr) => Array.isArray(arr) && arr.length > 0;
+        // For radar, all data points might legitimately be 0, so no "hasPositiveData" check needed here like for pie chart.
+        // We just need valid arrays of matching length.
 
         if (isValidArray(radarLabelsFromJinja) &&
-            isValidArray(radarDataFromJinja) &&
+            Array.isArray(radarDataFromJinja) && // radarDataFromJinja can be valid if empty, if labels are also empty, or contain 0s
             radarLabelsFromJinja.length === radarDataFromJinja.length) {
 
+            if(chartMessageEl) chartMessageEl.style.display = 'none'; // Hide message if data is good
+            console.log("[BFI SCRIPT] Radar chart data appears structurally valid. Creating chart.");
+
             try {
-                new Chart(ctx, {
+                new Chart(ctxRadar, {
                     type: 'radar',
                     data: {
                         labels: radarLabelsFromJinja,
                         datasets: [{
-                            label: 'Your Score', // This label is used by tooltips, but the legend itself is hidden
+                            label: 'Your Score',
                             data: radarDataFromJinja,
                             fill: true,
                             backgroundColor: 'rgba(54, 162, 235, 0.2)',
@@ -178,39 +207,23 @@
                         }]
                     },
                     options: {
-                        elements: {
-                            line: {
-                                borderWidth: 3
-                            }
-                        },
+                        elements: { line: { borderWidth: 3 }},
                         scales: {
                             r: {
-                                angleLines: {
-                                    display: true
-                                },
+                                angleLines: { display: true },
                                 suggestedMin: 0,
                                 suggestedMax: 5,
-                                pointLabels: {
-                                    font: {
-                                        size: 13
-                                    }
-                                },
-                                ticks: {
-                                    stepSize: 1
-                                }
+                                pointLabels: { font: { size: 13 }},
+                                ticks: { stepSize: 1 }
                             }
                         },
                         plugins: {
-                            legend: {
-                                display: false // MODIFICATION: Hide the legend
-                            },
+                            legend: { display: false },
                             tooltip: {
                                 callbacks: {
                                     label: function(context) {
-                                        let label = context.dataset.label || ''; // Tooltip can still use the dataset label
-                                        if (label) {
-                                            label += ': ';
-                                        }
+                                        let label = context.dataset.label || '';
+                                        if (label) label += ': ';
                                         if (context.parsed.r !== null) {
                                             label += context.parsed.r.toFixed(2);
                                         }
@@ -221,33 +234,46 @@
                         }
                     }
                 });
-                // console.log("Chart initialized successfully."); // Keep for debugging if needed
+                 console.log("[BFI SCRIPT] Radar Chart.js instance initialized successfully.");
             } catch (chartError) {
-                console.error("Error initializing Chart.js:", chartError);
-                const chartContainer = ctx.parentElement;
+                console.error("[BFI SCRIPT] Error initializing Radar Chart.js instance:", chartError);
+                const chartContainer = ctxRadar.parentElement;
                 if (chartContainer) {
-                    chartContainer.innerHTML = '<p class="text-center text-red-500">Could not display chart. See console for details.</p>';
+                    chartContainer.innerHTML = '<p class="text-center text-red-500">Could not display radar chart (init error). See console for details.</p>';
                 }
             }
         } else {
-            console.warn("Radar chart data is missing, empty, or mismatched. Chart will not be rendered.", {
-                labels: radarLabelsFromJinja,
-                data: radarDataFromJinja,
+            console.warn("[BFI SCRIPT] Radar chart data is missing, empty, or mismatched. Chart will not be rendered.", {
+                labels: radarLabelsFromJinja, data: radarDataFromJinja,
                 labelsValid: isValidArray(radarLabelsFromJinja),
-                dataValid: isValidArray(radarDataFromJinja),
-                lengthsMatch: radarLabelsFromJinja && radarDataFromJinja ? radarLabelsFromJinja.length === radarDataFromJinja.length : false
+                dataActuallyAnArray: Array.isArray(radarDataFromJinja), // Check if it's an array
+                lengthsMatch: Array.isArray(radarLabelsFromJinja) && Array.isArray(radarDataFromJinja) ? radarLabelsFromJinja.length === radarDataFromJinja.length : false
             });
-            const chartContainer = ctx.parentElement;
-            if (chartContainer) {
-                let messageP = chartContainer.querySelector('.chart-message');
-                if (!messageP) {
-                    messageP = document.createElement('p');
-                    messageP.className = 'text-center text-gray-500 chart-message';
-                    chartContainer.appendChild(messageP);
-                }
-                messageP.textContent = 'Personality profile chart data is not available or is incomplete.';
+
+            if (chartMessageEl) { // If the Jinja-conditional message exists
+                chartMessageEl.textContent = 'Personality profile chart data is not available or is incomplete.';
+                chartMessageEl.style.display = 'block'; // Ensure it's visible
+            } else if (chartSection) { // If it doesn't, create a new one
+                const p = document.createElement('p');
+                p.className = 'text-center text-gray-500 mt-4 chart-message-fallback';
+                p.textContent = 'Personality profile data is insufficient to render chart (fallback message).';
+                chartSection.appendChild(p);
             }
         }
-    });
+    }
+
+    // --- How to call initializeBfiRadarChart ---
+    if (typeof Chart !== 'undefined') {
+        console.log('[BFI SCRIPT] Chart.js library is defined. Initializing chart shortly.');
+        requestAnimationFrame(() => {
+            setTimeout(initializeBfiRadarChart, 50); // Small delay after RAF
+        });
+    } else {
+        console.error('[BFI SCRIPT] Chart.js library is NOT defined. Chart cannot be initialized. Check script loading order and network tab.');
+        const canvasContainer = document.getElementById('bfiRadarChart')?.parentElement;
+        if (canvasContainer) {
+             canvasContainer.innerHTML = '<p class="text-center text-red-500">Error: Charting library (Chart.js) failed to load. Check network console.</p>';
+        }
+    }
 </script>
 {% endblock %}

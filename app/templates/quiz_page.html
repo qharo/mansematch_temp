@@ -1,526 +1,583 @@
-<file path="app/templates/quiz_page.html">
-    <!-- app/templates/quiz_page.html -->
-    {% extends "base.html" %} {% block content %}
-    <script id="quiz-data-json" type="application/json">
-        {{ quiz | tojson | safe }}
-    </script>
+<!-- app/templates/quiz_page.html -->
+{% extends "base.html" %} {% block content %}
+<script id="quiz-data-json" type="application/json">
+    {{ quiz | tojson | safe }}
+</script>
 
-    <div class="container mx-auto px-4 py-8 mt-6" id="quiz-container">
-        <!-- Back to Dashboard Button -->
-        <div class="mb-2">
-            <!-- Reduced margin from mb-4 to mb-2 -->
-            <a
-                href="{{ url_for('dashboard_page_route') }}"
-                class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
-                title="Back to Dashboard"
-            >
-                <svg
-                    class="w-6 h-6"
-                    fill="currentColor"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                    ></path>
-                </svg>
-            </a>
-        </div>
-
-        <!-- Loading/Error Message Area -->
-        <div id="quiz-message-area" class="text-center py-10">
-            <p class="text-xl text-gray-700">Loading quiz...</p>
-        </div>
-
-        <h1
-            id="quiz-title"
-            class="text-2xl font-bold text-gray-800 mb-1 text-center"
-            style="display: none"
-        ></h1>
-        <p
-            id="question-progress"
-            class="text-sm text-gray-600 mb-4 text-center"
-            style="display: none"
-        ></p>
-
-        <!-- Form will contain all questions -->
-        <form
-            id="quiz-form"
-            method="POST"
-            action="{{ url_for('submit_quiz_route', quiz_id=quiz.id) }}"
-            style="display: none"
+<div class="container mx-auto px-4 py-8 mt-6" id="quiz-container">
+    <!-- Back to Dashboard Button -->
+    <div class="mb-2">
+        <a
+            href="{{ url_for('dashboard_page_route') }}"
+            class="inline-flex items-center p-2 text-black hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-md transition-colors"
+            title="Back to Dashboard"
         >
-            <div id="questions-wrapper">
-                <!-- Questions will be injected here by JavaScript -->
-            </div>
-
-            <input type="hidden" name="answers" id="all-answers-json" />
-
-            <!-- Navigation -->
-            <div
-                id="quiz-navigation"
-                class="flex justify-between items-center mt-8"
+            <svg
+                class="w-6 h-6"
+                fill="currentColor"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
             >
-                <button
-                    type="button"
-                    id="prev-question-btn"
-                    onclick="prevQuestion()"
-                    class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Previous
-                </button>
-                <button
-                    type="button"
-                    id="next-question-btn"
-                    onclick="nextQuestion()"
-                    class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
-                >
-                    Next
-                </button>
-                <button
-                    type="submit"
-                    id="submit-quiz-btn"
-                    class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
-                    style="display: none"
-                >
-                    Submit Quiz
-                </button>
-            </div>
-        </form>
-
-        <!-- Submitted Message Area -->
-        <div
-            id="submitted-message-area"
-            class="text-center py-10"
-            style="display: none"
-        >
-            <p class="text-2xl text-green-600 font-semibold">
-                Quiz submitted successfully!
-            </p>
-            <p class="text-gray-600 mt-2">
-                You will be redirected to the dashboard shortly.
-            </p>
-        </div>
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                ></path>
+            </svg>
+        </a>
     </div>
 
-    <script>
-        let quizData = null;
-        let questions = [];
-        let currentQuestionIndex = 0;
-        let userAnswers = {};
+    <!-- Loading/Error Message Area -->
+    <div id="quiz-message-area" class="text-center py-10">
+        <p class="text-xl text-gray-700">Loading quiz...</p>
+    </div>
 
-        const quizMessageArea = document.getElementById("quiz-message-area");
-        const quizTitleEl = document.getElementById("quiz-title");
-        const questionProgressEl = document.getElementById("question-progress");
-        const quizFormEl = document.getElementById("quiz-form");
-        const questionsWrapperEl = document.getElementById("questions-wrapper");
-        const allAnswersJsonInput = document.getElementById("all-answers-json");
-        const prevBtn = document.getElementById("prev-question-btn");
-        const nextBtn = document.getElementById("next-question-btn");
-        const submitBtn = document.getElementById("submit-quiz-btn");
-        const quizNavigationEl = document.getElementById("quiz-navigation");
+    <h1
+        id="quiz-title"
+        class="text-2xl font-bold text-gray-800 mb-1 text-center"
+        style="display: none"
+    ></h1>
+    <p
+        id="question-progress"
+        class="text-sm text-gray-600 mb-4 text-center"
+        style="display: none"
+    ></p>
 
-        function escapeHtml(unsafe) {
-            if (unsafe === null || typeof unsafe === "undefined") return "";
-            return String(unsafe)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
+    <form
+        id="quiz-form"
+        method="POST"
+        action="{{ url_for('submit_quiz_route', quiz_id=quiz.id) }}"
+        style="display: none"
+    >
+        <div id="questions-wrapper"></div>
+        <input type="hidden" name="answers" id="all-answers-json" />
+        <div
+            id="quiz-navigation"
+            class="flex justify-between items-center mt-8"
+        >
+            <button
+                type="button"
+                id="prev-question-btn"
+                onclick="prevQuestion()"
+                class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-5 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                Previous
+            </button>
+            <button
+                type="button"
+                id="next-question-btn"
+                onclick="nextQuestion()"
+                class="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
+            >
+                Next
+            </button>
+            <button
+                type="submit"
+                id="submit-quiz-btn"
+                class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-5 rounded-md transition-colors"
+                style="display: none"
+            >
+                Submit Quiz
+            </button>
+        </div>
+    </form>
 
-        function escapeHtmlAttr(unsafe) {
-            // Separate function for attribute values to avoid breaking JS syntax
-            if (unsafe === null || typeof unsafe === "undefined") return "";
-            return String(unsafe)
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#39;");
-        }
+    <div
+        id="submitted-message-area"
+        class="text-center py-10"
+        style="display: none"
+    >
+        <p class="text-2xl text-green-600 font-semibold">
+            Quiz submitted successfully!
+        </p>
+        <p class="text-gray-600 mt-2">
+            You will be redirected to the dashboard shortly.
+        </p>
+    </div>
+</div>
 
-        function capitalizeFirstLetter(string) {
-            if (!string || string.length === 0) return string;
-            return string.charAt(0).toUpperCase() + string.slice(1);
-        }
+<script>
+    var quizData = null;
+    var questions = [];
+    var currentQuestionIndex = 0;
+    var userAnswers = {};
 
-        function updateSliderValueDisplay(questionId, value) {
-            const displayEl = document.getElementById(
-                `slider-value-display-${questionId}`,
+    const quizMessageArea = document.getElementById("quiz-message-area");
+    const quizTitleEl = document.getElementById("quiz-title");
+    const questionProgressEl = document.getElementById("question-progress");
+    const quizFormEl = document.getElementById("quiz-form");
+    const questionsWrapperEl = document.getElementById("questions-wrapper");
+    const allAnswersJsonInput = document.getElementById("all-answers-json");
+    const prevBtn = document.getElementById("prev-question-btn");
+    const nextBtn = document.getElementById("next-question-btn");
+    const submitBtn = document.getElementById("submit-quiz-btn");
+    const quizNavigationEl = document.getElementById("quiz-navigation");
+
+    function escapeHtml(unsafe) {
+        if (unsafe === null || typeof unsafe === "undefined") return "";
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function escapeHtmlAttr(unsafe) {
+        // Separate function for attribute values to avoid breaking JS syntax
+        if (unsafe === null || typeof unsafe === "undefined") return "";
+        return String(unsafe).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    function capitalizeFirstLetter(string) {
+        if (!string || string.length === 0) return string;
+        return string.charAt(0).toUpperCase() + string.slice(1);
+    }
+
+    function updateSliderValueDisplay(questionId, value) {
+        const displayEl = document.getElementById(
+            `slider-value-display-${questionId}`,
+        );
+        const question = questions.find((q) => q.id === questionId);
+        if (displayEl && question && question.options_map) {
+            const selectedOption = question.options_map.find(
+                (opt) => String(opt.value) === String(value),
             );
-            const question = questions.find((q) => q.id === questionId);
-            if (displayEl && question && question.options_map) {
-                const selectedOption = question.options_map.find(
-                    (opt) => String(opt.value) === String(value),
-                );
-                if (selectedOption) {
-                    let textToDisplay = selectedOption.text;
+            if (selectedOption) {
+                let textToDisplay = selectedOption.text;
+                // For BFI-10, remove the score in parenthesis. MAS-12 options are simpler.
+                if (quizData.id === "bfi-10") {
                     const parenIndex = textToDisplay.lastIndexOf(" (");
                     if (parenIndex !== -1) {
                         textToDisplay = textToDisplay.substring(0, parenIndex);
                     }
-                    textToDisplay = capitalizeFirstLetter(textToDisplay);
-                    displayEl.textContent = escapeHtml(textToDisplay);
-                } else {
-                    displayEl.textContent = "N/A";
                 }
+                textToDisplay = capitalizeFirstLetter(textToDisplay.trim()); // Trim whitespace before capitalizing
+                displayEl.textContent = escapeHtml(textToDisplay);
+            } else {
+                displayEl.textContent = "N/A";
             }
         }
+    }
 
-        function initializeQuiz() {
-            const quizDataScript = document.getElementById("quiz-data-json");
-            if (!quizDataScript || !quizDataScript.textContent) {
+    function initializeQuiz() {
+        console.log("Initializing quiz...");
+        currentQuestionIndex = 0;
+
+        if (quizMessageArea) {
+            quizMessageArea.innerHTML =
+                '<p class="text-xl text-gray-700">Loading quiz...</p>';
+            quizMessageArea.style.display = "block";
+        }
+        if (quizTitleEl) quizTitleEl.style.display = "none";
+        if (questionProgressEl) questionProgressEl.style.display = "none";
+        if (quizFormEl) quizFormEl.style.display = "none";
+
+        const quizDataScript = document.getElementById("quiz-data-json");
+        if (!quizDataScript || !quizDataScript.textContent) {
+            if (quizMessageArea)
                 quizMessageArea.innerHTML =
                     '<p class="text-xl text-red-600">Error: Quiz data script element missing.</p>';
-                return;
-            }
-            try {
-                quizData = JSON.parse(quizDataScript.textContent);
-            } catch (e) {
-                console.error("Failed to parse quiz data:", e);
+            return;
+        }
+        try {
+            quizData = JSON.parse(quizDataScript.textContent);
+        } catch (e) {
+            console.error("Failed to parse quiz data:", e);
+            if (quizMessageArea)
                 quizMessageArea.innerHTML =
                     '<p class="text-xl text-red-600">Error: Could not load quiz data.</p>';
-                return;
-            }
-
-            if (!quizData || !quizData.id || !quizData.title) {
-                quizMessageArea.innerHTML =
-                    '<p class="text-xl text-red-600">Error: Invalid quiz data structure.</p>';
-                return;
-            }
-
-            questions = quizData.questions || [];
-            quizTitleEl.textContent = quizData.title;
-
-            if (questions.length === 0) {
-                quizTitleEl.style.display = "block";
-                quizMessageArea.innerHTML = `
-                    <p class="text-xl text-gray-700">This quiz currently has no questions.</p>
-                    <a href="{{ url_for('dashboard_page_route') }}" class="mt-4 inline-block bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                        Back to Dashboard
-                    </a>`;
-                return;
-            }
-
-            userAnswers = {};
-            questions.forEach((q) => {
-                if (q && q.id) {
-                    // MODIFIED SECTION - START
-                    if (
-                        quizData.id === "bfi-10" &&
-                        q.type === "multiple-choice" &&
-                        Array.isArray(q.options_map)
-                    ) {
-                        // For BFI-10 sliders, initialize with the default middle value (3 for a 1-5 scale).
-                        // This ensures that userAnswers has a numeric value from the start,
-                        // preventing the "unanswered" validation from blocking the JSON population
-                        // if the user doesn't interact with a slider.
-                        // The options_map values are 1, 2, 3, 4, 5. So 3 is the neutral/default.
-                        userAnswers[q.id] = 3;
-                    } else {
-                        userAnswers[q.id] = null; // Default for other question types
-                    }
-                    // MODIFIED SECTION - END
-                }
-            });
-
-            renderQuestions();
-            showQuestion(currentQuestionIndex);
-            updateNavigation();
-
-            quizMessageArea.style.display = "none";
-            quizTitleEl.style.display = "block";
-            questionProgressEl.style.display = "block";
-            quizFormEl.style.display = "block";
-            quizNavigationEl.style.display = "flex";
+            return;
         }
 
-        function renderQuestions() {
-            questionsWrapperEl.innerHTML = "";
-            questions.forEach((question) => {
-                if (!question || !question.id) {
-                    console.warn(
-                        "Skipping invalid question during render:",
-                        question,
-                    );
-                    return;
-                }
-                const questionDiv = document.createElement("div");
-                questionDiv.id = `question-${question.id}`;
-                questionDiv.className =
-                    "bg-white p-12 rounded-xl shadow-lg mb-8 question-item";
-                questionDiv.style.display = "none";
+        if (!quizData || !quizData.id || !quizData.title) {
+            if (quizMessageArea)
+                quizMessageArea.innerHTML =
+                    '<p class="text-xl text-red-600">Error: Invalid quiz data structure.</p>';
+            return;
+        }
 
-                const qidStr = String(question.id);
-                let displayQuestionText = escapeHtml(question.text);
+        questions = quizData.questions || [];
+        if (quizTitleEl) quizTitleEl.textContent = quizData.title;
+
+        if (questions.length === 0) {
+            if (quizTitleEl) quizTitleEl.style.display = "block";
+            if (quizMessageArea)
+                quizMessageArea.innerHTML = `
+                <p class="text-xl text-gray-700">This quiz currently has no questions.</p>
+                <a href="{{ url_for('dashboard_page_route') }}" class="mt-4 inline-block bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                    Back to Dashboard
+                </a>`;
+            return;
+        }
+
+        userAnswers = {};
+        questions.forEach((q) => {
+            if (q && q.id) {
+                // MODIFIED for B & D: Default answer for BFI-10 and MAS-12 to 3 (Neutral)
+                if (
+                    (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                    q.type === "multiple-choice" &&
+                    Array.isArray(q.options_map)
+                ) {
+                    userAnswers[q.id] = 3; // Default to Neutral (value 3)
+                } else {
+                    userAnswers[q.id] = null; // For other types or if no options_map
+                }
+            }
+        });
+        console.log(
+            "Initialized userAnswers:",
+            JSON.parse(JSON.stringify(userAnswers)),
+        ); // Deep copy for logging
+
+        renderQuestions();
+        showQuestion(currentQuestionIndex);
+        updateNavigation();
+
+        if (quizMessageArea) quizMessageArea.style.display = "none";
+        if (quizTitleEl) quizTitleEl.style.display = "block";
+        if (questionProgressEl) questionProgressEl.style.display = "block";
+        if (quizFormEl) quizFormEl.style.display = "block";
+        if (quizNavigationEl) quizNavigationEl.style.display = "flex";
+    }
+
+    function renderQuestions() {
+        if (!questionsWrapperEl) return;
+        questionsWrapperEl.innerHTML = "";
+        questions.forEach((question) => {
+            if (!question || !question.id) {
+                console.warn(
+                    "Skipping invalid question during render:",
+                    question,
+                );
+                return;
+            }
+            const questionDiv = document.createElement("div");
+            questionDiv.id = `question-${question.id}`;
+            questionDiv.className =
+                "bg-white p-12 rounded-xl shadow-lg mb-8 question-item"; // Increased padding
+            questionDiv.style.display = "none";
+
+            const qidStr = String(question.id);
+            let displayQuestionText = escapeHtml(question.text);
+            let questionStatementHtml = "";
+
+            // MODIFICATION C: Conditional question statement rendering
+            if (quizData.id === "mas-12") {
+                // For MAS-12, display question text directly without prefix or highlight
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    ${displayQuestionText}
+                </h2>`;
+            } else if (quizData.id === "bfi-10") {
+                // For BFI-10, use the "I see myself as someone who..." prefix and highlight
                 if (displayQuestionText.startsWith("...")) {
                     displayQuestionText = displayQuestionText
                         .substring(3)
                         .trim();
                 }
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    I see myself as someone who
+                    <span class="bg-yellow-200 px-2 py-1 rounded">${displayQuestionText}</span>
+                </h2>`;
+            } else {
+                // Fallback for any other quiz types (if any added later)
+                questionStatementHtml = `
+                <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
+                    ${displayQuestionText}
+                </h2>`;
+            }
 
-                const questionStatementHtml = `
-                    <h2 class="text-xl font-semibold text-gray-700 text-center mb-10">
-                        I see myself as someone who
-                        <span class="bg-yellow-200 px-2 py-1 rounded">${displayQuestionText}</span>
-                    </h2>`;
+            let optionsHtml = "";
+            let currentSelectionDisplayHtml = "";
 
-                let optionsHtml = "";
-                let currentSelectionDisplayHtml = "";
+            // MODIFICATION B: Use slider for MAS-12 as well
+            if (
+                (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                question.type === "multiple-choice" &&
+                Array.isArray(question.options_map)
+            ) {
+                const optionsMap = question.options_map;
+                // Default value is now set in initializeQuiz, retrieve it here
+                let initialSliderValue =
+                    userAnswers[qidStr] !== null &&
+                    typeof userAnswers[qidStr] !== "undefined"
+                        ? userAnswers[qidStr]
+                        : 3; // Fallback, should ideally be set
 
-                if (
-                    quizData.id === "bfi-10" &&
-                    question.type === "multiple-choice" &&
-                    Array.isArray(question.options_map)
-                ) {
-                    const optionsMap = question.options_map;
-                    // initialSliderValue will now correctly be sourced from userAnswers[qidStr] which is pre-filled (e.g., 3)
-                    let initialSliderValue =
-                        userAnswers[qidStr] !== null &&
-                        typeof userAnswers[qidStr] !== "undefined"
-                            ? userAnswers[qidStr]
-                            : 3; // Fallback, though userAnswers should be set
+                const currentOptionObj =
+                    optionsMap.find(
+                        (opt) =>
+                            String(opt.value) === String(initialSliderValue),
+                    ) || optionsMap.find((opt) => String(opt.value) === "3"); // Default to middle option
 
-                    const currentOptionObj =
-                        optionsMap.find(
-                            (opt) =>
-                                String(opt.value) ===
-                                String(initialSliderValue),
-                        ) ||
-                        optionsMap.find((opt) => String(opt.value) === "3");
-
-                    let initialDisplayLabel = "Neutral";
-                    if (currentOptionObj) {
-                        let textToDisplay = currentOptionObj.text;
+                let initialDisplayLabel = "Neutral"; // Default
+                if (currentOptionObj) {
+                    let textToDisplay = currentOptionObj.text;
+                    if (quizData.id === "bfi-10") {
+                        // BFI-10 specific label cleaning
                         const parenIndex = textToDisplay.lastIndexOf(" (");
-                        if (parenIndex !== -1) {
+                        if (parenIndex !== -1)
                             textToDisplay = textToDisplay.substring(
                                 0,
                                 parenIndex,
                             );
-                        }
-                        initialDisplayLabel =
-                            capitalizeFirstLetter(textToDisplay);
                     }
+                    initialDisplayLabel = capitalizeFirstLetter(
+                        textToDisplay.trim(),
+                    );
+                }
 
-                    currentSelectionDisplayHtml = `
-                        <div id="slider-value-display-${qidStr}" class="text-3xl text-green-600 font-semibold text-center mb-10">
-                            ${escapeHtml(initialDisplayLabel)}
-                        </div>`;
+                currentSelectionDisplayHtml = `<div id="slider-value-display-${qidStr}" class="text-3xl text-green-600 font-semibold text-center mb-10">${escapeHtml(initialDisplayLabel)}</div>`;
 
-                    let startLabelText = optionsMap[0].text;
+                let startLabelText = optionsMap[0].text;
+                if (quizData.id === "bfi-10") {
                     const startParenIdx = startLabelText.lastIndexOf(" (");
-                    if (startParenIdx !== -1) {
+                    if (startParenIdx !== -1)
                         startLabelText = startLabelText.substring(
                             0,
                             startParenIdx,
                         );
-                    }
-                    startLabelText = capitalizeFirstLetter(startLabelText);
+                }
+                startLabelText = capitalizeFirstLetter(startLabelText.trim());
 
-                    let endLabelText = optionsMap[optionsMap.length - 1].text;
+                let endLabelText = optionsMap[optionsMap.length - 1].text;
+                if (quizData.id === "bfi-10") {
                     const endParenIdx = endLabelText.lastIndexOf(" (");
-                    if (endParenIdx !== -1) {
+                    if (endParenIdx !== -1)
                         endLabelText = endLabelText.substring(0, endParenIdx);
-                    }
-                    endLabelText = capitalizeFirstLetter(endLabelText);
+                }
+                endLabelText = capitalizeFirstLetter(endLabelText.trim());
 
-                    optionsHtml = `
-                        <div class="slider-container mx-auto" style="max-width: 500px;">
-                            <div class="flex justify-between w-full mb-3 px-1" aria-hidden="true">
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                                <span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>
-                            </div>
-
-                            <input type="range" id="slider-${qidStr}" name="q_${qidStr}"
-                                   min="${escapeHtmlAttr(String(optionsMap[0].value))}"
-                                   max="${escapeHtmlAttr(String(optionsMap[optionsMap.length - 1].value))}"
-                                   value="${escapeHtmlAttr(String(initialSliderValue))}" step="1"
-                                   class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 outline-none"
-                                   oninput="updateSliderValueDisplay('${qidStr}', this.value); updateAnswer('${qidStr}', this.value);">
-
-                            <div class="flex justify-between text-xs text-gray-500 mt-2 px-1">
-                                <span>${escapeHtml(startLabelText)}</span>
-                                <span>${escapeHtml(endLabelText)}</span>
-                            </div>
+                optionsHtml = `
+                    <div class="slider-container mx-auto" style="max-width: 500px;">
+                        <div class="flex justify-between w-full mb-3 px-1" aria-hidden="true">${Array(
+                            5,
+                        )
+                            .fill(0)
+                            .map(
+                                () =>
+                                    '<span class="w-1.5 h-1.5 bg-gray-300 rounded-full"></span>',
+                            )
+                            .join("")}</div>
+                        <input type="range" id="slider-${qidStr}" name="q_${qidStr}"
+                               min="${escapeHtmlAttr(String(optionsMap[0].value))}" max="${escapeHtmlAttr(String(optionsMap[optionsMap.length - 1].value))}"
+                               value="${escapeHtmlAttr(String(initialSliderValue))}" step="1"
+                               class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 outline-none"
+                               oninput="updateSliderValueDisplay('${qidStr}', this.value); updateAnswer('${qidStr}', this.value);">
+                        <div class="flex justify-between text-xs text-gray-500 mt-2 px-1">
+                            <span>${escapeHtml(startLabelText)}</span>
+                            <span>${escapeHtml(endLabelText)}</span>
+                        </div>
+                    </div>`;
+            } else if (
+                // Standard radio buttons for other multiple-choice questions
+                question.type === "multiple-choice" &&
+                (Array.isArray(question.options_map) ||
+                    Array.isArray(question.options))
+            ) {
+                const optsArray = question.options_map || question.options;
+                let radioOptionsListHtml = optsArray
+                    .map((opt) => {
+                        const isMapped = !!question.options_map;
+                        const optionValue = isMapped ? String(opt.value) : opt;
+                        const optionDisplay = isMapped ? opt.text : opt;
+                        return `
+                        <div>
+                            <label class="flex items-center p-3 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
+                                <input type="radio" name="q_${qidStr}" value="${escapeHtmlAttr(optionValue)}"
+                                       class="form-radio h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                       onchange="updateAnswer('${qidStr}', this.value)">
+                                <span class="ml-3 text-gray-700">${escapeHtml(optionDisplay)}</span>
+                            </label>
                         </div>`;
-                } else if (
-                    question.type === "multiple-choice" &&
-                    (Array.isArray(question.options_map) ||
-                        Array.isArray(question.options))
+                    })
+                    .join("");
+                optionsHtml = `<div class="space-y-3 mt-10">${radioOptionsListHtml}</div>`;
+            }
+            questionDiv.innerHTML = `${questionStatementHtml} ${currentSelectionDisplayHtml} ${optionsHtml}`;
+            questionsWrapperEl.appendChild(questionDiv);
+        });
+    }
+
+    function showQuestion(index) {
+        if (!questionProgressEl) return;
+        document
+            .querySelectorAll(".question-item")
+            .forEach((el) => (el.style.display = "none"));
+
+        if (questions[index] && questions[index].id) {
+            const qId = questions[index].id;
+            const currentQuestionEl = document.getElementById(
+                `question-${qId}`,
+            );
+            if (currentQuestionEl) {
+                currentQuestionEl.style.display = "block";
+                const answer = userAnswers[qId]; // Should be a number (e.g., 3) due to initialization
+
+                // Check if this quiz type uses a slider
+                if (
+                    (quizData.id === "bfi-10" || quizData.id === "mas-12") &&
+                    questions[index].type === "multiple-choice" &&
+                    Array.isArray(questions[index].options_map)
                 ) {
-                    const optsArray = question.options_map || question.options;
-                    let radioOptionsListHtml = optsArray
-                        .map((opt) => {
-                            const isMapped = !!question.options_map;
-                            const optionValue = isMapped
-                                ? String(opt.value)
-                                : opt;
-                            const optionDisplay = isMapped ? opt.text : opt;
-                            return `
-                            <div>
-                                <label class="flex items-center p-3 rounded-md hover:bg-gray-100 cursor-pointer transition-colors">
-                                    <input type="radio" name="q_${qidStr}" value="${escapeHtmlAttr(optionValue)}"
-                                           class="form-radio h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                                           onchange="updateAnswer('${qidStr}', this.value)">
-                                    <span class="ml-3 text-gray-700">${escapeHtml(optionDisplay)}</span>
-                                </label>
-                            </div>`;
-                        })
-                        .join("");
-                    optionsHtml = `<div class="space-y-3 mt-10">${radioOptionsListHtml}</div>`;
-                }
-
-                questionDiv.innerHTML = `${questionStatementHtml} ${currentSelectionDisplayHtml} ${optionsHtml}`;
-                questionsWrapperEl.appendChild(questionDiv);
-            });
-        }
-
-        function showQuestion(index) {
-            document
-                .querySelectorAll(".question-item")
-                .forEach((el) => (el.style.display = "none"));
-
-            if (questions[index] && questions[index].id) {
-                const qId = questions[index].id;
-                const currentQuestionEl = document.getElementById(
-                    `question-${qId}`,
-                );
-                if (currentQuestionEl) {
-                    currentQuestionEl.style.display = "block";
-                    const answer = userAnswers[qId]; // This will be the pre-filled value (e.g., 3) for BFI-10
-
-                    if (
-                        quizData.id === "bfi-10" &&
-                        questions[index].type === "multiple-choice" &&
-                        Array.isArray(questions[index].options_map)
-                    ) {
-                        const slider = currentQuestionEl.querySelector(
-                            `input[type="range"][name="q_${qId}"]`,
+                    const slider = currentQuestionEl.querySelector(
+                        `input[type="range"][name="q_${qId}"]`,
+                    );
+                    if (slider) {
+                        // 'answer' should be numeric (e.g. 3) from initialization or updateAnswer
+                        slider.value = String(answer); // Set slider position
+                        updateSliderValueDisplay(qId, slider.value); // Update text display
+                    }
+                } else {
+                    // For standard radio buttons
+                    if (answer !== null && typeof answer !== "undefined") {
+                        const selectedRadio = currentQuestionEl.querySelector(
+                            `input[name="q_${qId}"][value="${escapeHtmlAttr(String(answer))}"]`,
                         );
-                        if (slider) {
-                            // 'answer' will be the numeric value from userAnswers (e.g., 3)
-                            let sliderValueToSet =
-                                answer !== null && typeof answer !== "undefined"
-                                    ? answer
-                                    : 3;
-                            slider.value = String(sliderValueToSet);
-                            updateSliderValueDisplay(qId, slider.value);
-                        }
-                    } else {
-                        if (answer !== null && typeof answer !== "undefined") {
-                            const selectedRadio =
-                                currentQuestionEl.querySelector(
-                                    `input[name="q_${qId}"][value="${escapeHtmlAttr(String(answer))}"]`,
-                                );
-                            if (selectedRadio) selectedRadio.checked = true;
-                        }
+                        if (selectedRadio) selectedRadio.checked = true;
                     }
                 }
             }
-            questionProgressEl.textContent = `Question ${index + 1} of ${questions.length}`;
         }
+        questionProgressEl.textContent = `Question ${index + 1} of ${questions.length}`;
+    }
 
-        window.updateAnswer = function (questionId, answerValue) {
-            if (quizData.id === "bfi-10") {
-                userAnswers[questionId] = parseFloat(answerValue); // answerValue from slider is string
-            } else {
-                try {
-                    const numValue = parseFloat(answerValue);
-                    userAnswers[questionId] =
-                        !isNaN(numValue) &&
-                        String(numValue) === String(answerValue)
-                            ? numValue
-                            : String(answerValue);
-                } catch (e) {
-                    userAnswers[questionId] = String(answerValue);
-                }
-            }
-        };
-
-        function nextQuestion() {
-            if (currentQuestionIndex < questions.length - 1) {
-                currentQuestionIndex++;
-                showQuestion(currentQuestionIndex);
-                updateNavigation();
+    // MODIFICATION D: Ensure MAS-12 also gets numeric answers for consistency
+    window.updateAnswer = function (questionId, answerValue) {
+        if (quizData.id === "bfi-10" || quizData.id === "mas-12") {
+            userAnswers[questionId] = parseFloat(answerValue);
+        } else {
+            // For other quiz types, attempt to parse as number if possible, else string
+            try {
+                const numValue = parseFloat(answerValue);
+                userAnswers[questionId] =
+                    !isNaN(numValue) && String(numValue) === String(answerValue)
+                        ? numValue
+                        : String(answerValue);
+            } catch (e) {
+                userAnswers[questionId] = String(answerValue);
             }
         }
+        console.log(
+            "Updated userAnswers:",
+            questionId,
+            userAnswers[questionId],
+            JSON.parse(JSON.stringify(userAnswers)),
+        );
+    };
 
-        function prevQuestion() {
-            if (currentQuestionIndex > 0) {
-                currentQuestionIndex--;
-                showQuestion(currentQuestionIndex);
-                updateNavigation();
-            }
+    function nextQuestion() {
+        if (currentQuestionIndex < questions.length - 1) {
+            currentQuestionIndex++;
+            showQuestion(currentQuestionIndex);
+            updateNavigation();
         }
+    }
 
-        function updateNavigation() {
-            prevBtn.disabled = currentQuestionIndex === 0;
-            nextBtn.style.display =
-                currentQuestionIndex === questions.length - 1
-                    ? "none"
-                    : "inline-block";
-            submitBtn.style.display =
-                currentQuestionIndex === questions.length - 1
-                    ? "inline-block"
-                    : "none";
+    function prevQuestion() {
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            showQuestion(currentQuestionIndex);
+            updateNavigation();
         }
+    }
 
+    function updateNavigation() {
+        if (!prevBtn || !nextBtn || !submitBtn) return;
+        prevBtn.disabled = currentQuestionIndex === 0;
+        nextBtn.style.display =
+            currentQuestionIndex === questions.length - 1
+                ? "none"
+                : "inline-block";
+        submitBtn.style.display =
+            currentQuestionIndex === questions.length - 1
+                ? "inline-block"
+                : "none";
+    }
+
+    if (quizFormEl) {
         quizFormEl.addEventListener("submit", function (event) {
+            // Validation: Ensure all questions are answered for BFI-10 and MAS-12
+            // Since MAS-12 now defaults to 3, every question effectively has an answer.
+            // BFI-10 also defaults to 3.
+            // This validation can be simplified or made more generic if needed.
+            // For now, BFI-10 has a more explicit "please answer all" message if any default was not changed AND one was missed.
+            // For simplicity with MAS-12 and BFI-10 defaulting, we can skip strict "all answered" check here for now,
+            // as they will submit with defaults.
+            // The previous BFI-10 specific alert for *unanswered* questions:
             if (quizData && quizData.id === "bfi-10") {
+                // Or could be: (quizData.id === "bfi-10" || quizData.id === "mas-12")
                 let firstUnansweredQ = null;
                 let firstUnansweredIndex = -1;
                 for (let i = 0; i < questions.length; i++) {
-                    // For BFI-10, userAnswers[questions[i].id] will now be a number (e.g., 3)
-                    // so this condition (=== null or undefined) will be false if all defaults are set.
-                    if (
-                        userAnswers[questions[i].id] === null ||
-                        typeof userAnswers[questions[i].id] === "undefined"
-                    ) {
-                        firstUnansweredQ = questions[i];
-                        firstUnansweredIndex = i;
-                        break;
-                    }
+                    // Check if userAnswers[questions[i].id] is still the initial default or explicitly null
+                    // This logic might need refinement if "unanswered" means "not touched from default"
+                    // For now, since defaults are numbers, this original check for null/undefined is less relevant for BFI/MAS.
+                    // If you want to force users to *change* from default, this needs more logic.
+                    // For now, we assume submitting defaults is okay. The original logic was:
+                    // if (userAnswers[questions[i].id] === null || typeof userAnswers[questions[i].id] === "undefined")
+                    // With defaults being 3, this condition will likely not trigger for BFI/MAS unless something went wrong.
                 }
-                if (firstUnansweredQ) {
-                    event.preventDefault();
-                    currentQuestionIndex = firstUnansweredIndex;
-                    showQuestion(currentQuestionIndex);
-                    updateNavigation();
-                    let qText = escapeHtml(firstUnansweredQ.text).startsWith(
-                        "...",
-                    )
-                        ? escapeHtml(firstUnansweredQ.text).substring(3).trim()
-                        : escapeHtml(firstUnansweredQ.text);
-                    alert(
-                        `Please provide an answer for: "I see myself as someone who ${qText}" (Question ${firstUnansweredIndex + 1}).`,
-                    );
-                    return; // Important: exit listener so allAnswersJsonInput is not populated if validation fails
-                }
+                // ... (original alert logic for BFI-10 if firstUnansweredQ is found) ...
             }
-            // If validation passes (or not BFI-10), this line will now correctly execute.
-            allAnswersJsonInput.value = JSON.stringify(userAnswers);
-        });
 
-        if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", initializeQuiz);
-        } else {
-            if (
-                document.getElementById("quiz-container") &&
-                document.getElementById("quiz-data-json")
-            ) {
-                initializeQuiz();
+            if (allAnswersJsonInput) {
+                try {
+                    const answersString = JSON.stringify(userAnswers);
+                    allAnswersJsonInput.value = answersString;
+                    console.log("Attempting to submit answers:", answersString); // DEBUGGING
+                    if (!answersString || answersString === "{}") {
+                        // Basic check
+                        console.error(
+                            "Answers string is empty or invalid before submission attempt.",
+                        );
+                        // alert("Cannot submit empty answers."); // Optional user alert
+                        // event.preventDefault(); return;
+                    }
+                } catch (e) {
+                    console.error(
+                        "Error stringifying userAnswers on submit:",
+                        e,
+                        userAnswers,
+                    );
+                    alert(
+                        "A client-side error occurred while preparing your answers. Please try again.",
+                    );
+                    event.preventDefault();
+                    return;
+                }
             } else {
-                document.addEventListener("DOMContentLoaded", initializeQuiz);
+                console.error("#all-answers-json input not found on submit!");
+                alert("A critical page error occurred. Cannot submit quiz.");
+                event.preventDefault();
+                return;
             }
+            // If we reach here, the form should submit with the stringified answers.
+        });
+    }
+
+    function attemptInitializeQuiz() {
+        if (
+            document.getElementById("quiz-container") &&
+            document.getElementById("quiz-data-json")
+        ) {
+            initializeQuiz();
+        } else {
+            console.warn(
+                "Quiz container or data script not found. Quiz initialization skipped.",
+            );
         }
-    </script>
-    {% endblock %} {% block scripts %} {# Scripts specific to quiz_page are now
-    in the content block above #} {% endblock %}
-</file>
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", attemptInitializeQuiz);
+    } else {
+        attemptInitializeQuiz();
+    }
+</script>
+{% endblock %} {% block scripts %}{% endblock %}
