@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__) # Logger for this module
 
 # --- Import database components ---
 # This import should now work correctly because `app` is a package
-from .database import reports_collection, connect_to_mongo, close_mongo_connection
+from . import database # Import the database module itself
+from .database import connect_to_mongo, close_mongo_connection
 
 # --- Constants & Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
@@ -251,9 +252,9 @@ async def dashboard_page_route(
     quizzes_definitions = load_quizzes_data().get("quizzes", [])
 
     user_reports = []
-    if reports_collection is not None:
+    if database.reports_collection is not None:
         try:
-            report_cursor = reports_collection.find({"user_id": current_user["id"]}).sort("date_taken", -1)
+            report_cursor = database.reports_collection.find({"user_id": current_user["id"]}).sort("date_taken", -1)
             user_reports = list(report_cursor)
             logger.debug(f"User {current_user['email']} has {len(user_reports)} reports from MongoDB.")
         except Exception as e:
@@ -358,7 +359,7 @@ async def submit_quiz_route(
     logger.info(f"Quiz submission for quiz_id: {quiz_id} by user: {current_user['email']}")
     logger.debug(f"Raw answers JSON string from form: {answers}")
 
-    if reports_collection is None:
+    if database.reports_collection is None:
         logger.error("Reports collection is not available. Cannot save quiz submission.")
         raise HTTPException(status_code=503, detail="Database service unavailable. Cannot save quiz results.")
 
@@ -435,7 +436,7 @@ async def submit_quiz_route(
     }
 
     try:
-        insert_result = reports_collection.insert_one(new_report_doc)
+        insert_result = database.reports_collection.insert_one(new_report_doc)
         # PyMongo's insert_one returns InsertOneResult, _id is on insert_result.inserted_id
         logger.info(f"New report {new_report_id} (MongoDB _id: {insert_result.inserted_id}) saved for user {current_user['email']}.")
     except Exception as e:
@@ -460,13 +461,13 @@ async def report_page_route(
 ):
     logger.info(f"User {current_user['email']} requesting report page for report_id: {report_id}")
 
-    if reports_collection is None:
+    if database.reports_collection is None:
         logger.error(f"Reports collection unavailable when trying to view report {report_id}")
         raise HTTPException(status_code=503, detail="Database service unavailable. Cannot load report.")
 
     try:
         # Query using the custom 'id' field, not MongoDB's '_id'
-        report_detail = reports_collection.find_one({"id": report_id, "user_id": current_user["id"]})
+        report_detail = database.reports_collection.find_one({"id": report_id, "user_id": current_user["id"]})
     except Exception as e:
         logger.error(f"Error fetching report {report_id} from MongoDB for user {current_user['email']}: {e}")
         raise HTTPException(status_code=500, detail="Failed to load report due to a database error.")
@@ -515,7 +516,7 @@ if __name__ == "__main__":
     import uvicorn
     # This check is informative for local runs; DB connection status is handled by lifespan.
     logger.info("Attempting to run Uvicorn for local development...")
-    if os.getenv("MONGO_URI") and reports_collection is None and app.router.lifespan_context:
+    if os.getenv("MONGO_URI") and database.reports_collection is None and app.router.lifespan_context:
          # If MONGO_URI is set, we expect a connection. If reports_collection is still None
          # after lifespan should have run (or tried to run connect_to_mongo on import if lifespan isn't used),
          # it means connection likely failed.
