@@ -7,7 +7,7 @@ WORKDIR /app_root # Use a different name for WORKDIR to avoid confusion with pac
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
-ENV PYTHONPATH="/app_root" # Explicitly add app_root to PYTHONPATH
+ENV PYTHONPATH="/app_root"
 
 COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
